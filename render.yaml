@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: gomoku-server
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@gomoku/server
+    startCommand: pnpm --filter @gomoku/server start:prod
+    healthCheckPath: /health
+    envVars:
+      - key: CLIENT_URL
+        sync: false # Render 대시보드에서 Vercel 주소 입력

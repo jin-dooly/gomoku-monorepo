@@ -33,6 +33,9 @@ yarn-error.log*
 # Turbo
 .turbo
 
+# TypeScript incremental build cache
+*.tsbuildinfo
+
 # IDE
 .vscode
 .idea

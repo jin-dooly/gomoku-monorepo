@@ -1,16 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { CLIENT_URL, PORT } from './config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   // CORS 설정
   app.enableCors({
-    origin: 'http://localhost:3000',
+    origin: CLIENT_URL,
     credentials: true,
   });
 
-  await app.listen(3001);
-  console.log('Server is running on http://localhost:3001');
+  await app.listen(PORT);
+  console.log(`Server is running on port ${PORT} (client: ${CLIENT_URL})`);
 }
 bootstrap();
