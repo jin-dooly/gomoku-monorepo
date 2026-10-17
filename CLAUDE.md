@@ -7,6 +7,7 @@
 - [`docs/ux-spec.md`](docs/ux-spec.md): 확정된 유저플로우, 화면 명세, 게임 규칙, 해야 할 일, 미정 사항. **화면이나 게임 로직을 건드리는 작업은 이 문서를 기준으로 해요.**
 - [`apps/web/PRODUCT.md`](apps/web/PRODUCT.md): 사용자, 제품 원칙, 범위
 - 와이어프레임: https://claude.ai/artifact/JgydUTX1vGzZJSU82yRtEp
+- 디자인 목업(비주얼 기준): https://claude.ai/artifact/BTsJtEEcTz7gAi2ADuFwDD
 
 기획과 다르게 구현해야 할 것 같으면 먼저 사용자에게 확인해요. 새로 정한 기획은 `docs/ux-spec.md`(결정 기록 포함)에 반영해요. 미정 사항은 임의로 정하지 말고 물어봐요.
 

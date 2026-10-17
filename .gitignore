@@ -47,3 +47,7 @@ yarn-error.log*
 Thumbs.db
 
 .claude
+
+# Impeccable design skill: local decision pages and spent sketches
+apps/web/.impeccable/questions/
+apps/web/.impeccable/mocks/
