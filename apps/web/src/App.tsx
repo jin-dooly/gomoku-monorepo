@@ -1,11 +1,8 @@
-import { useSocket } from './hooks/useSocket';
 import { useGameSocket } from './hooks/useGameSocket';
 import { GameLobby } from './components/GameLobby';
 import { GameBoard } from './components/GameBoard';
 
 function App() {
-  const socket = useSocket();
-
   const {
     gameState,
     player,
@@ -14,7 +11,7 @@ function App() {
     makeMove,
     resetGame,
     error,
-  } = useGameSocket(socket);
+  } = useGameSocket();
 
   return (
     <div className="app">

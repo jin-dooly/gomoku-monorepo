@@ -1,69 +1,85 @@
+@import './styles/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: var(--color-text);
+  background-color: var(--color-bg);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--color-bg);
 }
 
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-.app {
-  width: 100%;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+button,
+input {
+  font: inherit;
+  color: inherit;
 }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-
-button:hover:not(:disabled) {
-  border-color: #646cff;
 }
 
 button:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
 }
 
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
-/* 게임 스타일 */
+/* 시간·카운트다운 같은 숫자는 고정폭으로 (ux-spec 5장) */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * ---- 초기 버전 화면용 스타일 ----
+ * 1단계에서 화면 01부터 새로 만들면 지워요.
+ */
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.app h1 {
+  font-size: 2rem;
+}
+
+.app button {
+  min-height: var(--touch-target);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  padding: 0.6em 1.2em;
+  font-weight: 500;
+  background-color: var(--color-surface-muted);
+}
+
+.app button:disabled {
+  opacity: 0.5;
+}
+
 .game-lobby {
   display: flex;
   flex-direction: column;
@@ -73,12 +89,10 @@ button:focus-visible {
 }
 
 .game-lobby input {
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  border-radius: 8px;
-  border: 1px solid #646cff;
-  background-color: #1a1a1a;
-  color: inherit;
+  min-height: var(--touch-target);
+  padding: 0.6em 1em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
 }
 
 .game-container {
@@ -94,63 +108,36 @@ button:focus-visible {
   gap: 1rem;
 }
 
-.board-info {
-  text-align: center;
-}
-
 .board-grid {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  background-color: #8b7355;
-  padding: 2px;
-  border-radius: 4px;
+  gap: 1px;
+  background-color: var(--color-board-line);
+  padding: 1px;
 }
 
 .board-row {
   display: flex;
-  gap: 2px;
+  gap: 1px;
 }
 
-.board-cell {
-  width: 40px;
-  height: 40px;
+.app .board-cell {
+  width: 32px;
+  height: 32px;
+  min-height: 0;
   padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #d4a574;
   border: none;
-  font-size: 24px;
-  cursor: pointer;
+  border-radius: 0;
+  background-color: var(--color-board);
+  font-size: 20px;
 }
 
-.board-cell:hover:not(:disabled) {
-  background-color: #c49564;
-}
-
-.board-cell:disabled {
+.app .board-cell:disabled {
+  opacity: 1;
   cursor: default;
 }
 
 .error {
-  background-color: #ff4444;
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
+  color: var(--color-danger);
   margin-bottom: 1rem;
-}
-
-.reset-button {
-  margin-top: 1rem;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
 }

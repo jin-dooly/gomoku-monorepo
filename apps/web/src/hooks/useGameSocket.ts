@@ -1,9 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
 import { GameState, Player, GameMove } from '@gomoku/shared';
+import { socket as appSocket } from '../lib/socket';
+import { useConnectionStatus } from './useConnectionStatus';
+
+// 초기 버전 이벤트(join-game, make-move 등)용 훅이에요. 새 이벤트는 shared의
+// ClientToServerEvents에만 정의돼 있어서 여기서는 타입 없는 소켓으로 다뤄요.
+// 1단계에서 방 구조로 바꾸면 이 파일을 지워요.
+const socket = appSocket as unknown as Socket;
 
 interface UseGameSocketReturn {
-  socket: Socket | null;
   gameState: GameState | null;
   player: Player | null;
   isConnected: boolean;
@@ -13,25 +19,13 @@ interface UseGameSocketReturn {
   error: string | null;
 }
 
-export const useGameSocket = (socket: Socket | null): UseGameSocketReturn => {
+export const useGameSocket = (): UseGameSocketReturn => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const isConnected = useConnectionStatus() === 'connected';
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!socket) return;
-
-    // 연결 상태 관리
-    socket.on('connect', () => {
-      setIsConnected(true);
-      setError(null);
-    });
-
-    socket.on('disconnect', () => {
-      setIsConnected(false);
-    });
-
     // 게임 이벤트 리스너
     socket.on('player-joined', (playerData: Player) => {
       setPlayer(playerData);
@@ -52,29 +46,27 @@ export const useGameSocket = (socket: Socket | null): UseGameSocketReturn => {
 
     // 정리
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
       socket.off('player-joined');
       socket.off('game-state');
       socket.off('game-over');
       socket.off('move-error');
     };
-  }, [socket]);
+  }, []);
 
   const joinGame = useCallback(
     (playerName: string) => {
-      if (!socket || !isConnected) {
+      if (!isConnected) {
         setError('Socket not connected');
         return;
       }
       socket.emit('join-game', { playerName });
     },
-    [socket, isConnected]
+    [isConnected]
   );
 
   const makeMove = useCallback(
     (row: number, col: number) => {
-      if (!socket || !isConnected || !player || !gameState) {
+      if (!isConnected || !player || !gameState) {
         setError('Cannot make move: missing game state or player');
         return;
       }
@@ -99,20 +91,19 @@ export const useGameSocket = (socket: Socket | null): UseGameSocketReturn => {
       socket.emit('make-move', move);
       setError(null);
     },
-    [socket, isConnected, player, gameState]
+    [isConnected, player, gameState]
   );
 
   const resetGame = useCallback(() => {
-    if (!socket || !isConnected) {
+    if (!isConnected) {
       setError('Socket not connected');
       return;
     }
     socket.emit('reset-game');
     setError(null);
-  }, [socket, isConnected]);
+  }, [isConnected]);
 
   return {
-    socket,
     gameState,
     player,
     isConnected,
