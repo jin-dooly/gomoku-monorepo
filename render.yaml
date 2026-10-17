@@ -3,8 +3,8 @@ services:
     name: gomoku-server
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm turbo run build --filter=@gomoku/server
-    startCommand: pnpm --filter @gomoku/server start:prod
+    buildCommand: npx --yes pnpm@10.28.1 install --frozen-lockfile && npx --yes pnpm@10.28.1 turbo run build --filter=@gomoku/server
+    startCommand: node apps/server/dist/main.js
     healthCheckPath: /health
     envVars:
       - key: CLIENT_URL
