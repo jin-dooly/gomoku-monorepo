@@ -35,7 +35,7 @@ export const GameBoard = ({ gameState, player, onCellClick }: GameBoardProps) =>
       <div className="board-grid">
         {gameState.board.map((row, rowIndex) => (
           <div key={rowIndex} className="board-row">
-            {row.map((cell, colIndex) => (
+            {row.map((_cell, colIndex) => (
               <button
                 key={`${rowIndex}-${colIndex}`}
                 className="board-cell"

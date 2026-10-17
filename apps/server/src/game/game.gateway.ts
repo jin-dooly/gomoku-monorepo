@@ -8,10 +8,11 @@ import {
 import { Server, Socket } from 'socket.io';
 import { GameService } from './game.service';
 import { GameMoveSchema } from '@gomoku/shared';
+import { CLIENT_URL } from '../config';
 
 @WebSocketGateway({
   cors: {
-    origin: 'http://localhost:3000',
+    origin: CLIENT_URL,
     credentials: true,
   },
 })
