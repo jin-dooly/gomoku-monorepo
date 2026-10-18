@@ -54,3 +54,59 @@
     padding-top: 40px;
   }
 }
+
+.host__cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.host__card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.host__card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.host__card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host__card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.host__accept {
+  flex: 1;
+}
+
+/* 끝난 요청은 흐리게, 도장은 또렷하게 */
+.host__ghost {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-panel-dim);
+}
+
+.host__ghost-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0.55;
+}

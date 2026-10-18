@@ -1,47 +1,87 @@
-import { useState } from 'react';
-import type { RoomSummary } from '@gomoku/shared';
+import { useRef, useState } from 'react';
+import type { PendingJoinRequest, RoomSummary } from '@gomoku/shared';
 import type { ConnectionStatus } from '../hooks/useConnectionStatus';
+import { deadlineFrom, secondsLeft, useCountdown } from '../hooks/useCountdown';
+import { useSocketEvent } from '../hooks/useSocketEvent';
 import { request } from '../lib/request';
 import { errorMessage, type RequestErrorCode } from '../lib/errors';
 import { Marquee } from '../components/Marquee';
+import { LOW_MS, Meter } from '../components/Meter';
 import { PixelIcon, PixelStone } from '../components/Pixel';
 import './HostWaitingScreen.css';
+
+const REQUEST_TTL_MS = 60_000;
+/** 남은 시간이 이보다 적을 때 사라진 요청은 시간 초과로 봐요. 그 외에는 참가자가 취소한 거예요. */
+const EXPIRY_GRACE_MS = 2000;
+/** 끝난 요청 도장은 최근 것만 남겨요. */
+const MAX_GHOSTS = 3;
+
+type Card = { requestId: string; nickname: string; deadline: number };
+type Ghost = { requestId: string; nickname: string; reason: 'expired' | 'cancelled' };
 
 type Props = {
   status: ConnectionStatus;
   room: RoomSummary;
   onClosed: () => void;
+  onMatched: (guestNickname: string) => void;
 };
 
-/**
- * 02 방장 · 대기실 (ux-spec 4장).
- * 1단계에서는 요청이 없는 상태까지만 있어요. 입장 요청 카드는 2단계에서 붙여요.
- */
-export const HostWaitingScreen = ({ status, room, onClosed }: Props) => {
-  const [closing, setClosing] = useState(false);
+/** 02 방장 · 대기실 (ux-spec 4장) */
+export const HostWaitingScreen = ({ status, room, onClosed, onMatched }: Props) => {
+  const [cards, setCards] = useState<Card[]>([]);
+  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<RequestErrorCode | null>(null);
+  /** 내가 거절해서 사라진 요청은 도장으로 남기지 않아요. */
+  const decidedByMe = useRef(new Set<string>());
+
+  useSocketEvent('join:requests', (requests: PendingJoinRequest[]) => {
+    const incoming = new Set(requests.map((r) => r.requestId));
+    const now = Date.now();
+    const gone = cards
+      .filter((c) => !incoming.has(c.requestId) && !decidedByMe.current.has(c.requestId))
+      .map<Ghost>((c) => ({
+        requestId: c.requestId,
+        nickname: c.nickname,
+        reason: c.deadline - now <= EXPIRY_GRACE_MS ? 'expired' : 'cancelled',
+      }));
+    if (gone.length) setGhosts((g) => [...gone, ...g].slice(0, MAX_GHOSTS));
+    setCards(requests.map((r) => ({ requestId: r.requestId, nickname: r.nickname, deadline: deadlineFrom(r.remainingMs) })));
+  });
 
   const handleClose = async () => {
-    setClosing(true);
+    setBusy('close');
     const result = await request('room:close');
-    setClosing(false);
-
+    setBusy(null);
     // 이미 방이 없으면(not-in-room) 닫힌 것과 같아서 그대로 홈으로 가요.
     if (result.ok || result.error === 'not-in-room') onClosed();
     else setError(result.error);
   };
 
+  const decide = async (card: Card, accept: boolean) => {
+    setBusy(card.requestId);
+    setError(null);
+    decidedByMe.current.add(card.requestId);
+    const result = await request(accept ? 'join:accept' : 'join:reject', { requestId: card.requestId });
+    setBusy(null);
+
+    if (!result.ok) {
+      decidedByMe.current.delete(card.requestId);
+      setError(result.error);
+      return;
+    }
+    if (accept) onMatched(card.nickname);
+    else setCards((prev) => prev.filter((c) => c.requestId !== card.requestId));
+  };
+
   return (
     <div className="screen">
-      <Marquee
-        status={status}
-        trailing={<span className="tag tag--lamp">내 방</span>}
-      >
+      <Marquee status={status} trailing={<span className="tag tag--lamp">내 방</span>}>
         <button
           className="iconbtn host__back"
           type="button"
           onClick={() => void handleClose()}
-          disabled={closing}
+          disabled={busy !== null}
           aria-label="방 닫기"
         >
           <PixelIcon name="back" />
@@ -50,12 +90,6 @@ export const HostWaitingScreen = ({ status, room, onClosed }: Props) => {
       </Marquee>
 
       <main className="host">
-        {error && (
-          <p className="t-body field__error" role="alert">
-            {errorMessage(error)}
-          </p>
-        )}
-
         <p className="t-body">
           방 목록에 ‘{room.hostNickname}’ 방으로 보여요. 입장 요청을 수락하면 바로 대국이 시작돼요.
         </p>
@@ -81,16 +115,48 @@ export const HostWaitingScreen = ({ status, room, onClosed }: Props) => {
 
         <section className="host__requests" aria-labelledby="requests-title">
           <h2 id="requests-title" className="t-title">
-            입장 요청 <span className="accent num">0</span>
+            입장 요청 <span className="accent num">{cards.length}</span>
           </h2>
-          <div className="panel host__empty">
-            <div className="chase" aria-hidden="true">
-              <span className="lampdot" />
-              <span className="lampdot" />
-              <span className="lampdot" />
+
+          {error && (
+            <p className="t-body field__error" role="alert">
+              {errorMessage(error)}
+            </p>
+          )}
+
+          {cards.length === 0 && ghosts.length === 0 ? (
+            <div className="panel host__empty">
+              <div className="chase" aria-hidden="true">
+                <span className="lampdot" />
+                <span className="lampdot" />
+                <span className="lampdot" />
+              </div>
+              <p className="t-body muted">아직 입장 요청이 없어요</p>
             </div>
-            <p className="t-body muted">아직 입장 요청이 없어요</p>
-          </div>
+          ) : (
+            <ul className="host__cards" aria-live="polite">
+              {cards.map((card) => (
+                <RequestCard
+                  key={card.requestId}
+                  card={card}
+                  disabled={busy !== null}
+                  onAccept={() => void decide(card, true)}
+                  onReject={() => void decide(card, false)}
+                />
+              ))}
+              {ghosts.map((ghost) => (
+                <li key={ghost.requestId} className="host__ghost">
+                  <div className="host__ghost-info">
+                    <span className="t-title">{ghost.nickname}</span>
+                    <span className="t-body">
+                      {ghost.reason === 'expired' ? '응답이 없어 자동으로 취소됐어요' : '참가자가 요청을 취소했어요'}
+                    </span>
+                  </div>
+                  <span className="stamp">{ghost.reason === 'expired' ? '시간 초과' : '요청 취소'}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <p className="t-body muted">
@@ -98,5 +164,39 @@ export const HostWaitingScreen = ({ status, room, onClosed }: Props) => {
         </p>
       </main>
     </div>
+  );
+};
+
+const RequestCard = ({
+  card,
+  disabled,
+  onAccept,
+  onReject,
+}: {
+  card: Card;
+  disabled: boolean;
+  onAccept: () => void;
+  onReject: () => void;
+}) => {
+  const remaining = useCountdown(card.deadline);
+  const low = remaining < LOW_MS;
+
+  return (
+    <li className="panel host__card">
+      <div className="host__card-head">
+        <PixelStone stone="white" size={28} />
+        <span className="t-title host__card-name">{card.nickname}</span>
+        <span className={low ? 't-body num low' : 't-body num muted'}>{secondsLeft(remaining)}초 후 자동 취소</span>
+      </div>
+      <Meter remainingMs={remaining} totalMs={REQUEST_TTL_MS} />
+      <div className="host__card-actions">
+        <button className="btn btn--ghost" type="button" onClick={onReject} disabled={disabled}>
+          거절
+        </button>
+        <button className="btn btn--coin host__accept" type="button" onClick={onAccept} disabled={disabled}>
+          수락하고 시작
+        </button>
+      </div>
+    </li>
   );
 };

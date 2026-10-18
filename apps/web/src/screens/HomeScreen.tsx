@@ -1,5 +1,5 @@
-import { useId, useState, type FormEvent } from 'react';
-import { NicknameSchema, type RoomSummary } from '@gomoku/shared';
+import { useId, useRef, useState, type FormEvent } from 'react';
+import { NicknameSchema, type JoinRequestTicket, type RoomSummary } from '@gomoku/shared';
 import type { ConnectionStatus } from '../hooks/useConnectionStatus';
 import { useRoomList } from '../hooks/useRoomList';
 import { request } from '../lib/request';
@@ -14,28 +14,36 @@ type Props = {
   nickname: string;
   onNicknameChange: (nickname: string) => void;
   onRoomCreated: (room: RoomSummary) => void;
+  onJoinRequested: (ticket: JoinRequestTicket) => void;
   /** 직전 화면에서 생긴 일을 알려줘요. 예: 연결이 끊겨 방이 닫힘 */
   notice: string | null;
 };
 
 /** 01 홈 · 방 목록 (ux-spec 4장) */
-export const HomeScreen = ({ status, nickname, onNicknameChange, onRoomCreated, notice }: Props) => {
+export const HomeScreen = ({ status, nickname, onNicknameChange, onRoomCreated, onJoinRequested, notice }: Props) => {
   const connected = status === 'connected';
   const nicknameId = useId();
   const hintId = useId();
   const [error, setError] = useState<RequestErrorCode | null>(null);
   const [creating, setCreating] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  /** 닉네임이 맞으면 앞뒤 공백을 지운 값을, 틀리면 입력칸에 알리고 null을 돌려줘요. */
+  const validNickname = (): string | null => {
+    const parsed = NicknameSchema.safeParse(nickname);
+    if (parsed.success) return parsed.data;
+    setError('invalid-payload');
+    inputRef.current?.focus();
+    return null;
+  };
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
-    const parsed = NicknameSchema.safeParse(nickname);
-    if (!parsed.success) {
-      setError('invalid-payload');
-      return;
-    }
+    const valid = validNickname();
+    if (!valid) return;
 
     setCreating(true);
-    const result = await request('room:create', { nickname: parsed.data });
+    const result = await request('room:create', { nickname: valid });
     setCreating(false);
 
     if (result.ok) onRoomCreated(result.data);
@@ -70,6 +78,7 @@ export const HomeScreen = ({ status, nickname, onNicknameChange, onRoomCreated, 
               닉네임
             </label>
             <input
+              ref={inputRef}
               id={nicknameId}
               className="input"
               value={nickname}
@@ -91,15 +100,41 @@ export const HomeScreen = ({ status, nickname, onNicknameChange, onRoomCreated, 
           </button>
         </form>
 
-        <RoomList status={status} />
+        <RoomList status={status} validNickname={validNickname} onJoinRequested={onJoinRequested} />
       </main>
     </div>
   );
 };
 
-const RoomList = ({ status }: { status: ConnectionStatus }) => {
+type RoomListProps = {
+  status: ConnectionStatus;
+  validNickname: () => string | null;
+  onJoinRequested: (ticket: JoinRequestTicket) => void;
+};
+
+const RoomList = ({ status, validNickname, onJoinRequested }: RoomListProps) => {
   const connected = status === 'connected';
   const { state, refresh } = useRoomList(connected);
+  const [joining, setJoining] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<{ roomId: string; code: RequestErrorCode } | null>(null);
+
+  const handleJoin = async (room: RoomSummary) => {
+    const nickname = validNickname();
+    if (!nickname) return;
+
+    setJoining(room.id);
+    setJoinError(null);
+    const result = await request('join:request', { roomId: room.id, nickname });
+    setJoining(null);
+
+    if (result.ok) {
+      onJoinRequested(result.data);
+      return;
+    }
+    setJoinError({ roomId: room.id, code: result.error });
+    // 방이 사라졌거나 대국이 시작됐으면 목록이 낡은 거라 다시 불러와요. 에러 문구는 목록 위에 남겨요.
+    if (result.error === 'room-not-found' || result.error === 'room-not-waiting') void refresh();
+  };
   const rooms = 'rooms' in state ? state.rooms : null;
   const loading = state.status === 'loading';
 
@@ -119,6 +154,12 @@ const RoomList = ({ status }: { status: ConnectionStatus }) => {
           <PixelIcon name="refresh" className={loading ? 'blink' : undefined} />
         </button>
       </div>
+
+      {joinError && !rooms?.some((r) => r.id === joinError.roomId) && (
+        <p className="t-body field__error" role="alert">
+          {errorMessage(joinError.code)}
+        </p>
+      )}
 
       {state.status === 'error' && (
         <p className="t-body field__error" role="alert">
@@ -145,7 +186,14 @@ const RoomList = ({ status }: { status: ConnectionStatus }) => {
       ) : (
         <ul className="home__list">
           {rooms.map((room) => (
-            <RoomRow key={room.id} room={room} />
+            <RoomRow
+              key={room.id}
+              room={room}
+              joining={joining === room.id}
+              disabled={!connected || joining !== null}
+              error={joinError?.roomId === room.id ? joinError.code : null}
+              onJoin={() => void handleJoin(room)}
+            />
           ))}
         </ul>
       )}
@@ -153,19 +201,34 @@ const RoomList = ({ status }: { status: ConnectionStatus }) => {
   );
 };
 
-const RoomRow = ({ room }: { room: RoomSummary }) => {
+type RoomRowProps = {
+  room: RoomSummary;
+  joining: boolean;
+  disabled: boolean;
+  error: RequestErrorCode | null;
+  onJoin: () => void;
+};
+
+const RoomRow = ({ room, joining, disabled, error, onJoin }: RoomRowProps) => {
   const playing = room.status === 'playing';
   return (
     <li className={playing ? 'room room--busy' : 'room'}>
       <div className="room__info">
         <span className="t-title room__host">{room.hostNickname}</span>
         <span className="t-body muted num">{formatCreatedAt(room.createdAt)}</span>
+        {error && <span className="t-body field__error">{errorMessage(error)}</span>}
       </div>
       {playing ? (
         <span className="chip">대국 중</span>
       ) : (
-        // 입장 요청은 2단계에서 서버와 함께 연결해요.
-        <button className="btn btn--coin btn--row" type="button" disabled>
+        <button
+          className="btn btn--coin btn--row"
+          type="button"
+          onClick={onJoin}
+          disabled={disabled}
+          aria-busy={joining}
+          aria-label={`${room.hostNickname} 방에 입장 요청`}
+        >
           입장 요청
         </button>
       )}
