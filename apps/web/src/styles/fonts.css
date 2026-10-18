@@ -1,0 +1,31 @@
+/*
+ * Galmuri (https://github.com/quiple/galmuri, npm `galmuri` 2.40.3), SIL Open Font License 1.1.
+ * 라이선스 전문: ../assets/fonts/galmuri/OFL.txt
+ */
+@font-face {
+  font-family: 'Galmuri11';
+  src: url('../assets/fonts/galmuri/Galmuri11.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Galmuri11';
+  src: url('../assets/fonts/galmuri/Galmuri11-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Galmuri14';
+  src: url('../assets/fonts/galmuri/Galmuri14.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Galmuri9';
+  src: url('../assets/fonts/galmuri/Galmuri9.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}

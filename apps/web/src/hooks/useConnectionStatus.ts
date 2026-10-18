@@ -1,7 +1,17 @@
 import { useSyncExternalStore } from 'react';
 import { socket } from '../lib/socket';
 
-export type ConnectionStatus = 'connecting' | 'connected';
+/**
+ * - `waking`: 아직 한 번도 연결되지 않았어요. Render 무료 플랜이 잠에서 깨는 중일 수 있어요.
+ * - `connected`: 연결됨
+ * - `reconnecting`: 연결됐다가 끊겼고, Socket.IO가 다시 연결하는 중이에요.
+ */
+export type ConnectionStatus = 'waking' | 'connected' | 'reconnecting';
+
+let everConnected = socket.connected;
+socket.on('connect', () => {
+  everConnected = true;
+});
 
 const subscribe = (onChange: () => void) => {
   socket.on('connect', onChange);
@@ -12,11 +22,10 @@ const subscribe = (onChange: () => void) => {
   };
 };
 
-const getSnapshot = (): ConnectionStatus => (socket.connected ? 'connected' : 'connecting');
+const getSnapshot = (): ConnectionStatus => {
+  if (socket.connected) return 'connected';
+  return everConnected ? 'reconnecting' : 'waking';
+};
 
-/**
- * 서버 연결 상태예요. 끊기면 Socket.IO가 알아서 다시 연결하므로
- * 화면에는 "연결됨" / "연결 중" 두 가지만 보여줘요 (ux-spec 01 헤더).
- */
 export const useConnectionStatus = (): ConnectionStatus =>
   useSyncExternalStore(subscribe, getSnapshot);

@@ -1,40 +1,46 @@
 /*
- * 디자인 토큰. 지금 값은 폐기된 와이어프레임 기준값이에요. 1단계에서 화면을 새로 만들 때
- * docs/ux-spec.md 5장 "비주얼 기준값"(픽셀아트 목업)으로 바꿔요.
+ * 디자인 토큰. 값의 기준은 docs/ux-spec.md 5장 "비주얼 기준값"과 디자인 목업이에요.
  * 화면에서는 색이나 글꼴을 직접 쓰지 말고 이 변수를 써요.
  */
 :root {
-  /* 글꼴 */
-  --font-sans: 'IBM Plex Sans KR', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  /* 면 */
+  --color-ink: #16142e; /* 바탕 */
+  --color-deep: #0c0b1c; /* 흑 진영, 입력칸 */
+  --color-panel: #24204a; /* 마키, 목록 행, 시트 */
+  --color-panel-dim: #1c1940; /* 누를 수 없는 행 */
+  --color-raise: #3a3566; /* 올린 면, 보조 버튼 */
+  --color-raise-shade: #1b1838;
+  --color-disabled: #2a2650;
+  --color-disabled-text: #7c76a0;
 
-  /* 텍스트 */
-  --color-text: #1c1c1c;
-  --color-text-muted: #5f5f5f;
+  /* 글자 */
+  --color-paper: #f2eee3; /* 백 진영, 어두운 바탕 위 글자 */
+  --color-muted: #aba5cb; /* 어두운 바탕 위 보조 글자 */
+  --color-paper-muted: #57516f; /* 종이 위 보조 글자 */
 
-  /* 면과 테두리 */
-  --color-bg: #ffffff;
-  --color-surface-muted: #f2f2f0;
-  --color-border: #d4d4d4;
-
-  /* 강조: 주 버튼, 내 차례, 승리한 돌 링 */
-  --color-accent: #2457d6;
-  --color-accent-bg: #eef3fd;
-
-  /* 위험: 되돌릴 수 없는 버튼(기권, 나가기 확인) */
-  --color-danger: #b3261e;
+  /* 역할이 정해진 색 */
+  --color-coin: #ffc93c; /* 누를 수 있는 것에만 */
+  --color-coin-shade: #c98a12;
+  --color-lamp: #3fd6c6; /* 차례, 연결됨, 승리 링, 미리보기 */
+  --color-lamp-deep: #1e8c82; /* 종이 위 램프 */
+  --color-ember: #ff6b3d; /* 마지막 수, 남은 시간 15초 미만 */
+  --color-stamp: #f0555a; /* 도장, 되돌릴 수 없는 버튼 */
+  --color-stamp-shade: #a8323a;
 
   /* 오목판 */
-  --color-board: #e9e4d8;
-  --color-board-line: #7a7466;
-  --color-last-move: #e0622e;
-  --color-stone-black: #1c1c1c;
-  --color-stone-white: #ffffff;
+  --color-wood: #c9873f;
+  --color-wood-line: #5a3815;
+  --color-wood-frame: #7a4e22;
+
+  /* 글꼴: 픽셀이 깨지지 않게 원래 크기의 정수배로만 써요 */
+  --font-11: 'Galmuri11', sans-serif; /* 22px, 44px */
+  --font-14: 'Galmuri14', sans-serif; /* 14px, 28px */
+  --font-9: 'Galmuri9', sans-serif; /* 18px */
 
   /* 크기 */
   --touch-target: 44px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --board-size-mobile: 342px; /* 390px 화면 기준 (ux-spec 5장) */
+  --button-height: 52px;
+  --marquee-height: 56px;
+  --gutter: 16px;
+  --board-size-mobile: 345px; /* 23px × 15칸 */
 }
