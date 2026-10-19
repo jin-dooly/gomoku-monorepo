@@ -118,4 +118,40 @@ describe('RoomGateway (소켓 통합)', () => {
 
     expect(await over).toEqual({ winner: 'black', reason: 'disconnect', winningLine: null, moveCount: 0 });
   });
+
+  it('수락하면 두 사람이 각자 색을 받고, 번갈아 두다가 5목이면 둘 다 결과를 받아요', async () => {
+    const host = await connect();
+    const guest = await connect();
+    const created = await host.emitWithAck('room:create', { nickname: '지니' });
+    if (!created.ok) throw new Error(created.error);
+    const ticket = await guest.emitWithAck('join:request', { roomId: created.data.id, nickname: '도윤' });
+    if (!ticket.ok) throw new Error(ticket.error);
+
+    const hostStart = next(host, 'game:state');
+    const guestStart = next(guest, 'game:state');
+    await host.emitWithAck('join:accept', { requestId: ticket.data.requestId });
+    expect(await hostStart).toMatchObject({ you: 'black', turn: 'black', moveCount: 0 });
+    expect(await guestStart).toMatchObject({ you: 'white', turn: 'black', moveCount: 0 });
+
+    expect(await guest.emitWithAck('game:move', { row: 7, col: 7 })).toEqual({ ok: false, error: 'not-your-turn' });
+    expect(await host.emitWithAck('game:move', { row: 15, col: 0 })).toEqual({ ok: false, error: 'invalid-payload' });
+
+    const moves: [Client, number, number][] = [
+      [host, 7, 3], [guest, 0, 0], [host, 7, 4], [guest, 0, 1],
+      [host, 7, 5], [guest, 0, 2], [host, 7, 6], [guest, 0, 3],
+    ];
+    for (const [player, row, col] of moves) {
+      const seen = next(guest, 'game:state');
+      expect(await player.emitWithAck('game:move', { row, col })).toEqual({ ok: true, data: undefined });
+      await seen;
+    }
+
+    const hostOver = next(host, 'game:over');
+    const guestOver = next(guest, 'game:over');
+    await host.emitWithAck('game:move', { row: 7, col: 7 });
+
+    const expected = { winner: 'black', reason: 'five', moveCount: 9 };
+    expect(await hostOver).toMatchObject(expected);
+    expect(await guestOver).toMatchObject({ ...expected, winningLine: { direction: 'horizontal' } });
+  });
 });

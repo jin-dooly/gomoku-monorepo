@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Position, Stone } from '@gomoku/shared';
 import { JOIN_REQUEST_TTL_MS, RoomEvent, RoomService } from './room.service';
 
 describe('RoomService', () => {
@@ -261,12 +262,118 @@ describe('RoomService', () => {
     });
   });
 
-  describe('대국 중 나가기', () => {
-    const startMatch = () => {
+  /** 지니(host-1, 흑)와 도윤(guest-1, 백)의 대국을 시작해요. */
+  const startMatch = () => {
+    const roomId = openRoom();
+    service.accept('host-1', requestJoin(roomId, 'guest-1', '도윤'));
+    events = [];
+  };
+
+  const SOCKET: Record<Stone, string> = { black: 'host-1', white: 'guest-1' };
+  /** 흑부터 번갈아 둬요. 실패하면 바로 알려줘요. */
+  const play = (...moves: [number, number][]) => {
+    moves.forEach(([row, col], i) => {
+      const result = service.move(SOCKET[i % 2 === 0 ? 'black' : 'white'], { row, col });
+      if (!result.ok) throw new Error(`${i + 1}수 (${row},${col}): ${result.error}`);
+    });
+  };
+  const statesFor = (socketId: string) =>
+    events.flatMap((e) => (e.type === 'game-state' && e.socketId === socketId ? [e.payload] : []));
+  const overs = () => events.flatMap((e) => (e.type === 'game-over' ? [[e.socketId, e.payload] as const] : []));
+
+  describe('대국', () => {
+    it('수락하면 두 사람에게 첫 판 상태를 보내요. 방장이 흑이고 먼저 둬요', () => {
       const roomId = openRoom();
       service.accept('host-1', requestJoin(roomId, 'guest-1', '도윤'));
-      events = [];
-    };
+
+      const [host] = statesFor('host-1');
+      const [guest] = statesFor('guest-1');
+      expect(host).toMatchObject({
+        roomId,
+        hostNickname: '지니',
+        players: { black: { nickname: '지니' }, white: { nickname: '도윤' } },
+        you: 'black',
+        turn: 'black',
+        moveCount: 0,
+        lastMove: null,
+      });
+      expect(host.board.flat().every((c) => c === null)).toBe(true);
+      expect(guest.you).toBe('white');
+    });
+
+    it('두면 두 사람 모두에게 새 판, 다음 차례, 수 수, 마지막 수를 보내요', () => {
+      startMatch();
+
+      play([7, 7]);
+
+      for (const socketId of ['host-1', 'guest-1']) {
+        const [state] = statesFor(socketId);
+        expect(state.board[7][7]).toBe('black');
+        expect(state).toMatchObject({ turn: 'white', moveCount: 1, lastMove: { row: 7, col: 7, stone: 'black' } });
+      }
+    });
+
+    it('내 차례가 아니면 둘 수 없어요', () => {
+      startMatch();
+      expect(service.move('guest-1', { row: 7, col: 7 })).toEqual({ ok: false, error: 'not-your-turn' });
+
+      play([7, 7]);
+      expect(service.move('host-1', { row: 7, col: 8 })).toEqual({ ok: false, error: 'not-your-turn' });
+    });
+
+    it('돌이 있는 자리에는 둘 수 없고, 차례도 넘어가지 않아요', () => {
+      startMatch();
+      play([7, 7]);
+
+      expect(service.move('guest-1', { row: 7, col: 7 })).toEqual({ ok: false, error: 'occupied' });
+      expect(service.move('guest-1', { row: 7, col: 8 }).ok).toBe(true);
+    });
+
+    it('대국 중인 방에 없으면 둘 수 없어요', () => {
+      expect(service.move('nobody', { row: 0, col: 0 })).toEqual({ ok: false, error: 'not-in-room' });
+      openRoom();
+      expect(service.move('host-1', { row: 0, col: 0 })).toEqual({ ok: false, error: 'game-not-playing' });
+    });
+
+    it('5목을 완성하면 두 사람에게 승자와 이긴 줄을 보내고, 더는 둘 수 없어요', () => {
+      startMatch();
+      // 흑이 7행에 3~7열, 백은 0행에 둬요. 9수째 흑이 가로 5목.
+      play([7, 3], [0, 0], [7, 4], [0, 1], [7, 5], [0, 2], [7, 6], [0, 3], [7, 7]);
+
+      const expected = {
+        winner: 'black',
+        reason: 'five',
+        winningLine: { direction: 'horizontal', stones: [3, 4, 5, 6, 7].map((col): Position => ({ row: 7, col })) },
+        moveCount: 9,
+      };
+      expect(overs()).toEqual([
+        ['host-1', expected],
+        ['guest-1', expected],
+      ]);
+      expect(statesFor('host-1').at(-1)).toMatchObject({ moveCount: 9, lastMove: { row: 7, col: 7, stone: 'black' } });
+      expect(service.move('guest-1', { row: 1, col: 1 })).toEqual({ ok: false, error: 'game-not-playing' });
+    });
+
+    it('판이 가득 찰 때까지 5목이 없으면 무승부예요', () => {
+      startMatch();
+      // 마지막 한 칸만 남은 판을 만들어요. 2칸씩 색을 번갈아 채워서 어느 방향으로도 5목이 없어요.
+      const game = service.findByMember('host-1')!.game!;
+      game.board = game.board.map((row, r) =>
+        row.map((_, c): Stone | null => (r === 14 && c === 14 ? null : Math.floor((r + c) / 2) % 2 === 0 ? 'black' : 'white')),
+      );
+      game.moveCount = 224;
+      game.turn = 'black';
+
+      play([14, 14]);
+
+      expect(overs().map(([, p]) => p)).toEqual([
+        { winner: null, reason: 'draw', winningLine: null, moveCount: 225 },
+        { winner: null, reason: 'draw', winningLine: null, moveCount: 225 },
+      ]);
+    });
+  });
+
+  describe('대국 중 나가기', () => {
 
     it('참가자가 나가면 방장이 이기고 방이 사라져요', () => {
       startMatch();
@@ -296,6 +403,27 @@ describe('RoomService', () => {
           payload: { winner: 'white', reason: 'disconnect', winningLine: null, moveCount: 0 },
         },
       ]);
+    });
+
+    it('둔 수가 있으면 그 수 수를 보내요', () => {
+      startMatch();
+      play([7, 7], [7, 8], [8, 8]);
+      events = [];
+
+      service.leave('host-1');
+
+      expect(overs()).toEqual([['guest-1', { winner: 'white', reason: 'left', winningLine: null, moveCount: 3 }]]);
+    });
+
+    it('이미 끝난 판에서 나가면 대국 종료를 다시 보내지 않아요', () => {
+      startMatch();
+      play([7, 3], [0, 0], [7, 4], [0, 1], [7, 5], [0, 2], [7, 6], [0, 3], [7, 7]);
+      events = [];
+
+      service.leave('guest-1');
+
+      expect(overs()).toEqual([]);
+      expect(service.list()).toEqual([]);
     });
   });
 });

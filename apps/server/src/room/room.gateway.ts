@@ -10,6 +10,7 @@ import type { Server, Socket } from 'socket.io';
 import {
   Ack,
   ClientToServerEvents,
+  GameMovePayloadSchema,
   JoinDecisionPayloadSchema,
   JoinRequestPayloadSchema,
   JoinRequestTicket,
@@ -26,7 +27,7 @@ type GameServer = Server<ClientToServerEvents, ServerToClientEvents>;
 const INVALID: Ack<never> = { ok: false, error: 'invalid-payload' };
 
 /**
- * 방과 입장 요청 이벤트 (docs/ux-spec.md 7장).
+ * 방, 입장 요청, 대국 이벤트 (docs/ux-spec.md 7장).
  * 핸들러가 돌려준 값은 Socket.IO acknowledgement로 보낸 사람에게 가고,
  * 다른 사람에게 알릴 일은 RoomService의 이벤트를 받아 소켓 ID로 보내요.
  */
@@ -100,6 +101,15 @@ export class RoomGateway implements OnGatewayDisconnect {
     return this.rooms.reject(client.id, parsed.data.requestId);
   }
 
+  // ---- 대국 ----
+
+  @SubscribeMessage('game:move')
+  handleMove(@ConnectedSocket() client: GameSocket, @MessageBody() payload: unknown): Ack {
+    const parsed = GameMovePayloadSchema.safeParse(payload);
+    if (!parsed.success) return INVALID;
+    return this.rooms.move(client.id, parsed.data);
+  }
+
   private dispatch(event: RoomEvent) {
     switch (event.type) {
       case 'requests-changed':
@@ -107,6 +117,9 @@ export class RoomGateway implements OnGatewayDisconnect {
         break;
       case 'join-resolved':
         this.server.to(event.socketId).emit('join:resolved', { resolution: event.resolution });
+        break;
+      case 'game-state':
+        this.server.to(event.socketId).emit('game:state', event.payload);
         break;
       case 'game-over':
         this.server.to(event.socketId).emit('game:over', event.payload);
