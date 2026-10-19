@@ -94,6 +94,13 @@ export const RulesDialog = ({ onClose, liveStatus }: Props) => {
         </div>
 
         <div className="rules__foot">
+          <p className="t-body muted rules__notice">
+            폰트: Galmuri (
+            <a href="/licenses/galmuri-OFL.txt" target="_blank" rel="noreferrer">
+              SIL OFL
+            </a>
+            ) · 닉네임은 저장하지 않아요
+          </p>
           <button ref={closeRef} className="btn btn--ghost rules__close" type="button" onClick={onClose}>
             닫기
           </button>

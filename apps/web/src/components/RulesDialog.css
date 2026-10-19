@@ -88,6 +88,18 @@
   width: 100%;
 }
 
+/* 폰트 라이선스와 개인정보 한 줄 (결정 기록 2026-10-19) */
+.rules__notice {
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.rules__notice a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 /* 7×7 예시판 */
 .mini {
   margin: 0;
@@ -233,8 +245,15 @@
 
   .rules__foot {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
     padding-top: 0;
+  }
+
+  .rules__notice {
+    margin-bottom: 0;
+    text-align: left;
   }
 
   .rules__close {
