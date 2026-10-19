@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameOverPayload, LineDirection, RoomSummary, Stone } from '@gomoku/shared';
 import { request } from '../lib/request';
 import { formatClock } from '../hooks/useCountdown';
@@ -38,6 +38,12 @@ const DIRECTION_LABEL: Record<LineDirection, string> = {
 export const ResultSheet = ({ over, me, opponentName, isHost, rematch, opponentGone, opponentAwayMs, onLeft, onReopened }: Props) => {
   const [busy, setBusy] = useState<'rematch' | 'leave' | 'reopen' | null>(null);
   const [error, setError] = useState<RequestErrorCode | null>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+
+  // 키 작은 휴대폰에서는 시트가 화면 아래로 넘칠 수 있어요. 처음 뜰 때 버튼까지 보이게 내려요.
+  useEffect(() => {
+    sheet.current?.scrollIntoView?.({ block: 'nearest' });
+  }, []);
 
   const won = over.winner === me;
   const title = over.winner === null ? '비겼어요' : won ? '승리했어요' : '졌어요';
@@ -66,7 +72,7 @@ export const ResultSheet = ({ over, me, opponentName, isHost, rematch, opponentG
   };
 
   return (
-    <div className="result">
+    <div className="result" ref={sheet}>
       <div className="result__head">
         <h2 className={won ? 't-hero accent' : 't-hero'}>{title}</h2>
         <p className="t-body">{summaryOf(over, me, opponentName)}</p>
