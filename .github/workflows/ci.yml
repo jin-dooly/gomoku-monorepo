@@ -1,0 +1,36 @@
+name: CI
+
+# development에 올리거나 PR을 열면 타입 검사, 테스트, 빌드를 돌려요.
+on:
+  push:
+    branches: [development, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # 버전은 package.json의 packageManager를 따라요
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 타입 검사
+        run: pnpm type-check
+
+      - name: 테스트
+        run: pnpm test
+
+      - name: 빌드
+        run: pnpm build

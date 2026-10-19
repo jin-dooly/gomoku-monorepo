@@ -34,7 +34,7 @@
     },
     "type-check": {
       "dependsOn": [
-        "^type-check"
+        "^build"
       ]
     }
   }
