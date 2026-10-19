@@ -1,9 +1,25 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-export default defineConfig({
-  plugins: [react()],
+/**
+ * 링크 공유 미리보기는 이미지 주소가 절대 주소여야 잘 보여요.
+ * 배포할 때 VITE_SITE_URL(예: https://omok.vercel.app)을 주면 og:image를 절대 주소로 바꾸고 og:url을 넣어요.
+ */
+const socialMeta = (siteUrl: string | undefined): Plugin => ({
+  name: 'gomoku-social-meta',
+  transformIndexHtml(html) {
+    if (!siteUrl) return html;
+    const base = siteUrl.replace(/\/$/, '');
+    return html
+      .replace('content="/og-image.png"', `content="${base}/og-image.png"`)
+      .replace('<meta property="og:type"', `<meta property="og:url" content="${base}/" />
+    <meta property="og:type"`);
+  },
+});
+
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), socialMeta(loadEnv(mode, process.cwd(), 'VITE_').VITE_SITE_URL)],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -20,4 +36,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

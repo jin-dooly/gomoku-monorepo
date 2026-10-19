@@ -2,12 +2,27 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>오목</title>
+    <meta name="description" content="닉네임만 넣고 바로 두는 실시간 2인 오목. 방을 만들고, 입장 요청을 수락하면 바로 한 판 붙어요." />
     <meta name="theme-color" content="#16142e" />
-    <title>Gomoku Game</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- 링크 공유 미리보기. VITE_SITE_URL이 있으면 빌드할 때 og:url과 이미지 주소를 절대 주소로 바꿔요 (vite.config.ts) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta property="og:site_name" content="오목" />
+    <meta property="og:title" content="오목 · 실시간 2인 대국" />
+    <meta property="og:description" content="닉네임만 넣고 바로 두는 실시간 2인 오목. 방을 만들고, 입장 요청을 수락하면 바로 한 판 붙어요." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="도트 오목판 위에 흑돌 다섯 개가 가로로 이어진 그림" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
+    <noscript>오목은 자바스크립트를 켜야 둘 수 있어요.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
