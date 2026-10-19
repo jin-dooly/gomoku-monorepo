@@ -106,6 +106,37 @@ export type OpponentLeftPayload = { reason: 'left' | 'disconnect' };
 
 export type OpponentDisconnectedPayload = { remainingMs: number };
 
+/** 연결이 끊긴 사람을 기다리는 시간 (docs/ux-spec.md 3장). 지나면 남은 사람이 이겨요. */
+export const RECONNECT_GRACE_MS = 30_000;
+
+/**
+ * 소켓 연결할 때 handshake `auth`로 보내요.
+ * 처음이면 비워 두고, 서버가 `session:assigned`로 준 값을 sessionStorage에 저장했다가 다시 보내요.
+ */
+export type SessionAuth = { sessionId?: string };
+
+export type SessionAssignedPayload = { sessionId: string };
+
+/**
+ * 같은 세션이 다시 연결됐을 때(새로고침 포함) 지금 있던 곳을 그대로 이어서 보여줄 수 있게 보내는 스냅샷이에요.
+ * 방에 들어가 있지 않으면 보내지 않아요.
+ */
+export type SessionResumePayload = {
+  role: 'host' | 'guest';
+  room: RoomSummary;
+  /** 방장 대기실이면 null */
+  game: GameStatePayload | null;
+  /** 끝난 판이면 결과 */
+  over: GameOverPayload | null;
+  rematch: Stone[];
+  /** 끝난 판에서 상대가 나갔거나 연결이 끊겨 떠났어요(재대결 불가). */
+  opponentLeft: OpponentLeftPayload['reason'] | null;
+  /** 상대 연결이 끊겨 기다리는 중이면 남은 시간 */
+  opponentDisconnected: OpponentDisconnectedPayload | null;
+  /** 방장 대기실의 입장 요청 */
+  requests: PendingJoinRequest[];
+};
+
 export interface ClientToServerEvents {
   'room:list': (ack: AckCallback<RoomSummary[]>) => void;
   'room:create': (payload: RoomCreatePayload, ack: AckCallback<RoomSummary>) => void;
@@ -139,6 +170,12 @@ export interface ServerToClientEvents {
   /** 끝난 판의 결과 화면에서 상대가 나갔어요. 두는 중에 나가면 대신 game:over(reason: left/disconnect)가 와요. */
   'opponent:left': (payload: OpponentLeftPayload) => void;
 
+  /** 상대 연결이 끊겼어요. remainingMs 안에 돌아오지 않으면 내가 이겨요(대국 중) / 상대가 방을 떠나요. */
   'opponent:disconnected': (payload: OpponentDisconnectedPayload) => void;
   'opponent:reconnected': () => void;
+
+  /** 연결할 때마다 이 소켓의 세션 ID를 알려줘요. */
+  'session:assigned': (payload: SessionAssignedPayload) => void;
+  /** 다시 연결됐을 때(새로고침 포함) 방 안에 있었다면 그 상태를 보내요. */
+  'session:resume': (payload: SessionResumePayload) => void;
 }
