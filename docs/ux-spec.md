@@ -199,7 +199,7 @@
 - [x] 방 개념 추가: 방 생성/삭제, 방 목록 (`apps/server/src/room`). 방별 게임 상태는 3단계에서 붙여요.
 - [x] 플레이어 색 배정 버그 수정: 전역 판을 없애고 방장=흑, 참가자=백으로 구조상 고정했어요.
 - [x] 입장 요청 / 수락 / 거절 / 취소 처리와 60초 타이머.
-- [ ] 연결 끊김 30초 유예와 재접속 처리.
+- [x] 연결 끊김 30초 유예와 재접속 처리(세션 ID, 연결 상태 복구, 재개 스냅샷).
 - [x] 기권, 재대결(두 사람 동의, 색 교대), 결과 화면에서 나가기, 방장의 대기실로 돌아가기.
 - [x] 전역 `reset-game` 제거.
 - [x] 클라이언트에 보낼 정보 추가: 상대 닉네임, 마지막 수, 승리한 5개 돌의 좌표, 수 수.
@@ -235,7 +235,9 @@
 | S→C | `game:over` | 승자, 이유(5목 / 무승부 / 기권 / 나감 / 연결 끊김), 이긴 줄의 방향과 돌 좌표, 수 수 |
 | C→S | `rematch:request` / S→C `rematch:status` | 재대결 요청과 상태. 둘 다 요청하면 색을 바꿔 새 판의 `game:state`가 와요 |
 | S→C | `opponent:left` | 결과 화면에서 상대가 나가거나 연결이 끊겼어요. 재대결할 수 없어요(두는 중이면 대신 `game:over`) |
-| S→C | `opponent:disconnected` / `opponent:reconnected` | 상대 연결 상태. 재접속 방식은 미정(8장) |
+| S→C | `opponent:disconnected` / `opponent:reconnected` | 상대 연결이 끊겨 30초 기다리는 중 / 돌아옴 |
+| S→C | `session:assigned` | 연결할 때마다 세션 ID. 클라이언트는 sessionStorage에 저장했다가 handshake `auth.sessionId`로 다시 보내요 |
+| S→C | `session:resume` | 방에 있던 사람이 다시 연결하면(새로고침 포함) 지금 있던 곳의 스냅샷 |
 
 ## 8. 미정 사항
 
