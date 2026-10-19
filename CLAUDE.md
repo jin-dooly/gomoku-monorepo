@@ -17,7 +17,12 @@
 pnpm install
 pnpm dev     # web(:3000) + server(:3001) + shared watch
 pnpm build   # shared → web, server 순서로 빌드
+pnpm test    # 전체 테스트 (Vitest)
+pnpm type-check
 ```
+
+- 화면 문구에 새 글자를 넣으면 `apps/web/src/styles/fonts.test.ts`가 실패해요. `apps/web/scripts/subset-fonts.py`로 폰트를 다시 잘라요(fonttools, brotli 필요).
+- CI(`.github/workflows/ci.yml`)가 PR마다 타입 검사, 테스트, 빌드를 돌려요.
 
 ## 배포
 
