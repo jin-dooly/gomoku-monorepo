@@ -5,7 +5,13 @@ import { BOARD_SIZE } from '../game/rules';
 export const NICKNAME_MIN = 2;
 export const NICKNAME_MAX = 10;
 
-export const NicknameSchema = z.string().trim().min(NICKNAME_MIN).max(NICKNAME_MAX);
+/**
+ * 보이지 않는 문자는 받지 않아요: 제어 문자, 폭 없는 문자·방향 바꾸기 같은 서식 문자(\p{C}),
+ * 줄·문단 구분자. 다른 사람 화면에서 이름이 깨지거나 남의 이름처럼 보이게 꾸미는 걸 막아요.
+ */
+const VISIBLE_ONLY = /^[^\p{C}\p{Zl}\p{Zp}]+$/u;
+
+export const NicknameSchema = z.string().trim().min(NICKNAME_MIN).max(NICKNAME_MAX).regex(VISIBLE_ONLY);
 
 export const PositionSchema = z.object({
   row: z.number().int().min(0).max(BOARD_SIZE - 1),

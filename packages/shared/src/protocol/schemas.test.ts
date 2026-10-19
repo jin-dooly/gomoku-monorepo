@@ -12,6 +12,18 @@ describe('NicknameSchema', () => {
     expect(NicknameSchema.safeParse('가나다라마바사아자차카').success).toBe(false);
   });
 
+  it('보이지 않는 문자(제어·서식·줄 구분)가 섞이면 거절해요', () => {
+    expect(NicknameSchema.safeParse('지\u200b니').success).toBe(false); // 폭 없는 공백
+    expect(NicknameSchema.safeParse('지\u202e니').success).toBe(false); // 방향 바꾸기
+    expect(NicknameSchema.safeParse('지\u0007니').success).toBe(false); // 제어 문자
+    expect(NicknameSchema.safeParse('지\u2028니').success).toBe(false); // 줄 구분자
+  });
+
+  it('보이는 글자는 한글이 아니어도 받아요', () => {
+    expect(NicknameSchema.safeParse('Jinny 7').success).toBe(true);
+    expect(NicknameSchema.safeParse('별★빛').success).toBe(true);
+  });
+
   it('앞뒤 공백을 지운 다음 길이를 봐요', () => {
     expect(NicknameSchema.parse('  도윤  ')).toBe('도윤');
     expect(NicknameSchema.safeParse(' 도 ').success).toBe(false);
