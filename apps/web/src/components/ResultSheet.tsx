@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { GameOverPayload, LineDirection, RoomSummary, Stone } from '@gomoku/shared';
 import { request } from '../lib/request';
+import { formatClock } from '../hooks/useCountdown';
 import { errorMessage, type RequestErrorCode } from '../lib/errors';
 import './ResultSheet.css';
 
@@ -15,6 +16,8 @@ type Props = {
   rematch: Stone[];
   /** 상대가 방을 나갔거나 연결이 끊겼어요. 재대결할 수 없어요. */
   opponentGone: OpponentGone | null;
+  /** 상대 연결이 끊겨 기다리는 중이면 남은 시간 */
+  opponentAwayMs: number | null;
   onLeft: () => void;
   onReopened: (room: RoomSummary) => void;
 };
@@ -32,7 +35,7 @@ const DIRECTION_LABEL: Record<LineDirection, string> = {
  * - 제목: 승리만 청록, 패배·무승부는 종이색
  * - 상대가 나가거나 연결이 끊기면 재대결 없이, 방장은 [대기실로 돌아가기]와 [로비로 나가기] 중에 골라요.
  */
-export const ResultSheet = ({ over, me, opponentName, isHost, rematch, opponentGone, onLeft, onReopened }: Props) => {
+export const ResultSheet = ({ over, me, opponentName, isHost, rematch, opponentGone, opponentAwayMs, onLeft, onReopened }: Props) => {
   const [busy, setBusy] = useState<'rematch' | 'leave' | 'reopen' | null>(null);
   const [error, setError] = useState<RequestErrorCode | null>(null);
 
@@ -75,7 +78,9 @@ export const ResultSheet = ({ over, me, opponentName, isHost, rematch, opponentG
           ? `${opponentName} 님이 방을 나가서 재대결할 수 없어요`
           : opponentGone === 'disconnect'
             ? `${opponentName} 님의 연결이 끊겨서 재대결할 수 없어요`
-            : theyAsked
+            : opponentAwayMs !== null
+              ? `${opponentName} 님의 연결이 끊겼어요 · ${formatClock(opponentAwayMs)} 안에 돌아오면 재대결할 수 있어요`
+              : theyAsked
               ? `${opponentName} 님이 재대결을 원해요`
               : iAsked
                 ? `${opponentName} 님의 답을 기다리고 있어요`

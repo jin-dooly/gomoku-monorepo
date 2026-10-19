@@ -17,18 +17,22 @@ const EXPIRY_GRACE_MS = 2000;
 const MAX_GHOSTS = 3;
 
 type Card = { requestId: string; nickname: string; deadline: number };
+
+const toCard = (r: PendingJoinRequest): Card => ({ requestId: r.requestId, nickname: r.nickname, deadline: deadlineFrom(r.remainingMs) });
 type Ghost = { requestId: string; nickname: string; reason: 'expired' | 'cancelled' };
 
 type Props = {
   status: ConnectionStatus;
   room: RoomSummary;
+  /** 다시 연결해서 돌아왔을 때 서버가 보내 준 대기 중인 요청 */
+  initialRequests?: PendingJoinRequest[];
   onClosed: () => void;
   onMatched: (guestNickname: string) => void;
 };
 
 /** 02 방장 · 대기실 (ux-spec 4장) */
-export const HostWaitingScreen = ({ status, room, onClosed, onMatched }: Props) => {
-  const [cards, setCards] = useState<Card[]>([]);
+export const HostWaitingScreen = ({ status, room, initialRequests = [], onClosed, onMatched }: Props) => {
+  const [cards, setCards] = useState<Card[]>(() => initialRequests.map(toCard));
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<RequestErrorCode | null>(null);
@@ -46,7 +50,7 @@ export const HostWaitingScreen = ({ status, room, onClosed, onMatched }: Props) 
         reason: c.deadline - now <= EXPIRY_GRACE_MS ? 'expired' : 'cancelled',
       }));
     if (gone.length) setGhosts((g) => [...gone, ...g].slice(0, MAX_GHOSTS));
-    setCards(requests.map((r) => ({ requestId: r.requestId, nickname: r.nickname, deadline: deadlineFrom(r.remainingMs) })));
+    setCards(requests.map(toCard));
   });
 
   const handleClose = async () => {

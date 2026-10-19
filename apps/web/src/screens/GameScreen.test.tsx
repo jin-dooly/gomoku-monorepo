@@ -38,6 +38,7 @@ const renderGame = (game: GameStatePayload, over: GameOverPayload | null = null,
     isHost: true,
     rematch: [],
     opponentLeft: null,
+    opponentAway: null,
     onLeft: vi.fn(),
     onReopened: vi.fn(),
     ...extra,
@@ -304,6 +305,61 @@ describe('GameScreen', () => {
 
       expect(screen.queryByRole('menu')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: '대국 메뉴' })).toHaveFocus();
+    });
+  });
+
+  describe('연결이 끊겼을 때', () => {
+    it('상대 연결이 끊기면 07 대화상자와 남은 시간을 보여주고, 계속 기다리기로 닫아요', async () => {
+      const { user } = renderGame(state({ moveCount: 3, turn: 'white' }), null, { opponentAway: Date.now() + 21_000 });
+
+      const dialog = screen.getByRole('alertdialog', { name: '도윤 님의 연결이 끊겼어요' });
+      expect(dialog).toHaveTextContent('30초 안에 돌아오지 않으면 지니 님이 이겨요.');
+      expect(within(dialog).getByRole('timer')).toHaveTextContent('0:21');
+      expect(within(dialog).getByRole('button', { name: '계속 기다리기' })).toHaveFocus();
+
+      await user.click(within(dialog).getByRole('button', { name: '계속 기다리기' }));
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      // 대화상자를 닫아도 상대 카드에는 남은 시간이 계속 보여요.
+      expect(within(screen.getByRole('region', { name: '백 도윤' })).getByText(/연결 끊김 0:2\d/)).toBeInTheDocument();
+    });
+
+    it('07에서 나가기를 누르면 기권 안내 확인창을 거쳐요', async () => {
+      const { user, onLeft } = renderGame(state({ moveCount: 3 }), null, { opponentAway: Date.now() + 20_000 });
+
+      await user.click(screen.getByRole('button', { name: '나가기' }));
+      const confirm = screen.getByRole('alertdialog', { name: '방에서 나갈까요?' });
+      await user.click(within(confirm).getByRole('button', { name: '기권하고 나가기' }));
+
+      expect(mockRequest).toHaveBeenCalledWith('room:leave');
+      expect(onLeft).toHaveBeenCalled();
+    });
+
+    it('상대가 돌아오면(opponentAway가 null) 대화상자와 끊김 표시가 사라져요', () => {
+      const { rerenderWith } = renderGame(state({ moveCount: 3 }), null, { opponentAway: Date.now() + 20_000 });
+
+      rerenderWith({ opponentAway: null });
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(screen.queryByText(/연결 끊김/)).not.toBeInTheDocument();
+    });
+
+    it('결과 화면에서 상대가 끊기면 돌아오면 재대결할 수 있다고 알려줘요', () => {
+      renderGame(
+        state({ moveCount: 9 }),
+        { winner: 'black', reason: 'five', winningLine: null, moveCount: 9 },
+        { opponentAway: Date.now() + 15_000 },
+      );
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(screen.getByText(/도윤 님의 연결이 끊겼어요 · 0:1\d 안에 돌아오면 재대결할 수 있어요/)).toBeInTheDocument();
+    });
+
+    it('내 연결이 끊기면 판을 막고 다시 연결하는 중이라고 알려요', () => {
+      renderGame(state(), null, { status: 'reconnecting' });
+
+      expect(screen.getByText('연결이 끊겨서 다시 연결하고 있어요')).toBeInTheDocument();
+      expect(screen.getByRole('grid', { name: '오목판' })).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });

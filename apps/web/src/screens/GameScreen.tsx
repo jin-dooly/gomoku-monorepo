@@ -9,6 +9,7 @@ import {
   type Stone,
 } from '@gomoku/shared';
 import type { ConnectionStatus } from '../hooks/useConnectionStatus';
+import { formatClock, useCountdown } from '../hooks/useCountdown';
 import { request } from '../lib/request';
 import { errorMessage, type RequestErrorCode } from '../lib/errors';
 import { Marquee } from '../components/Marquee';
@@ -17,6 +18,7 @@ import { PlayerSide } from '../components/PlayerSide';
 import { GameMenu } from '../components/GameMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ResultSheet, type OpponentGone } from '../components/ResultSheet';
+import { OpponentAwayDialog } from '../components/OpponentAwayDialog';
 import './GameScreen.css';
 
 type Props = {
@@ -29,6 +31,8 @@ type Props = {
   rematch: Stone[];
   /** 결과 화면에서 상대가 나갔거나 연결이 끊겼어요 (opponent:left). */
   opponentLeft: OpponentGone | null;
+  /** 상대 연결이 끊겨 기다리는 중이면 30초 유예가 끝나는 시각 (07) */
+  opponentAway: number | null;
   onLeft: () => void;
   onReopened: (room: RoomSummary) => void;
 };
@@ -47,10 +51,15 @@ type Confirming = 'resign' | 'leave' | null;
  * 착수는 모바일과 PC 모두 미리보기 후 [G7에 두기]로 확정해요.
  * 두는 동안에만 ⋮ 메뉴(08 시트 · 10 드롭다운)가 있고, 기권과 나가기는 09 확인창을 거쳐요.
  */
-export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, onLeft, onReopened }: Props) => {
+export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, opponentAway, onLeft, onReopened }: Props) => {
   const me = game.you;
   const opponent = oppositeStone(me);
   const myTurn = !over && game.turn === me;
+  const connected = status === 'connected';
+  const away = opponentAway !== null;
+  const awayLeft = useCountdown(opponentAway ?? 0);
+  /** 07 대화상자에서 [계속 기다리기]를 눌렀어요. 상대가 다시 끊기면 새로 보여줘요. */
+  const [awayDismissed, setAwayDismissed] = useState(false);
   const [preview, setPreview] = useState<Position | null>(null);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<RequestErrorCode | null>(null);
@@ -72,6 +81,8 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
     setPlacing(false);
     if (!result.ok) setError(result.error);
   };
+
+  useEffect(() => setAwayDismissed(false), [opponentAway]);
 
   // 판이 끝나면 열려 있던 확인창은 닫아요 (예: 확인하는 사이 상대가 5목을 완성).
   useEffect(() => {
@@ -105,6 +116,7 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
 
   const sideState = (stone: Stone) => {
     const color = STONE_LABEL[stone];
+    if (stone === opponent && away) return `${color} · 연결 끊김 ${formatClock(awayLeft)}`;
     if (over) {
       if (stone === opponent && opponentGone) return `${color} · ${GONE_LABEL[opponentGone]}`;
       if (over.reason === 'resign' && over.winner !== stone) return `${color} · ${GONE_LABEL.resign}`;
@@ -134,7 +146,7 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
 
       <main className={over ? 'game__layout game__layout--over' : 'game__layout'}>
         <PlayerSide
-          className="game__opponent"
+          className={away ? 'game__opponent side--gone' : 'game__opponent'}
           stone={opponent}
           nickname={opponentName}
           state={sideState(opponent)}
@@ -149,7 +161,7 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
             preview={myTurn ? preview : null}
             previewStone={me}
             winningLine={over?.winningLine ?? null}
-            interactive={myTurn && !placing}
+            interactive={myTurn && !placing && connected}
             onPick={(pos) => {
               setPreview(pos);
               setError(null);
@@ -179,9 +191,15 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
               isHost={isHost}
               rematch={rematch}
               opponentGone={opponentGone}
+              opponentAwayMs={away ? awayLeft : null}
               onLeft={onLeft}
               onReopened={onReopened}
             />
+          ) : !connected ? (
+            <p className="t-title game__waiting">
+              <span className="lampdot lampdot--off blink" aria-hidden="true" />
+              연결이 끊겨서 다시 연결하고 있어요
+            </p>
           ) : myTurn ? (
             <>
               <div className="legend t-body muted">
@@ -240,6 +258,15 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
         </section>
       </main>
 
+      {away && !over && !awayDismissed && !confirming && (
+        <OpponentAwayDialog
+          opponentName={opponentName}
+          myName={game.players[me].nickname}
+          remainingMs={awayLeft}
+          onWait={() => setAwayDismissed(true)}
+          onLeave={() => openConfirm('leave')}
+        />
+      )}
       {confirming === 'resign' && (
         <ConfirmDialog
           title="기권할까요?"
