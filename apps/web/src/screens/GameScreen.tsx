@@ -4,8 +4,8 @@ import {
   toCoordinateLabel,
   type GameOverPayload,
   type GameStatePayload,
-  type LineDirection,
   type Position,
+  type RoomSummary,
   type Stone,
 } from '@gomoku/shared';
 import type { ConnectionStatus } from '../hooks/useConnectionStatus';
@@ -14,36 +14,49 @@ import { errorMessage, type RequestErrorCode } from '../lib/errors';
 import { Marquee } from '../components/Marquee';
 import { Board } from '../components/Board';
 import { PlayerSide } from '../components/PlayerSide';
+import { GameMenu } from '../components/GameMenu';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { ResultSheet, type OpponentGone } from '../components/ResultSheet';
 import './GameScreen.css';
 
 type Props = {
   status: ConnectionStatus;
   game: GameStatePayload;
   over: GameOverPayload | null;
+  /** 방장이면 상대가 나갔을 때 대기실로 돌아갈 수 있어요. */
+  isHost: boolean;
+  /** 재대결을 요청한 사람의 이번 판 색 */
+  rematch: Stone[];
+  /** 결과 화면에서 상대가 나갔거나 연결이 끊겼어요 (opponent:left). */
+  opponentLeft: OpponentGone | null;
   onLeft: () => void;
+  onReopened: (room: RoomSummary) => void;
 };
 
 const STONE_LABEL: Record<Stone, string> = { black: '흑', white: '백' };
-const DIRECTION_LABEL: Record<LineDirection, string> = {
-  horizontal: '가로',
-  vertical: '세로',
-  diagonal: '대각선',
-  'anti-diagonal': '대각선',
+const GONE_LABEL: Record<OpponentGone | 'resign', string> = {
+  resign: '기권',
+  left: '방을 나감',
+  disconnect: '연결 끊김',
 };
 
+type Confirming = 'resign' | 'leave' | null;
+
 /**
- * 04 대국 · 내 차례 / 05 대국 · 상대 차례 (ux-spec 4장).
+ * 04 대국 · 내 차례 / 05 대국 · 상대 차례 / 06 결과 · 재대결 (ux-spec 4장).
  * 착수는 모바일과 PC 모두 미리보기 후 [G7에 두기]로 확정해요.
- * 대국이 끝나면 3단계에서는 판에 승리 링과 간단한 결과만 보여줘요. 06 결과 시트와 재대결은 4단계예요.
+ * 두는 동안에만 ⋮ 메뉴(08 시트 · 10 드롭다운)가 있고, 기권과 나가기는 09 확인창을 거쳐요.
  */
-export const GameScreen = ({ status, game, over, onLeft }: Props) => {
+export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, onLeft, onReopened }: Props) => {
   const me = game.you;
   const opponent = oppositeStone(me);
   const myTurn = !over && game.turn === me;
   const [preview, setPreview] = useState<Position | null>(null);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<RequestErrorCode | null>(null);
-  const [leaving, setLeaving] = useState(false);
+  const [confirming, setConfirming] = useState<Confirming>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmError, setConfirmError] = useState<RequestErrorCode | null>(null);
 
   // 새 수가 오면(내가 뒀든 상대가 뒀든) 고른 자리를 지워요.
   useEffect(() => {
@@ -60,15 +73,43 @@ export const GameScreen = ({ status, game, over, onLeft }: Props) => {
     if (!result.ok) setError(result.error);
   };
 
-  const handleLeave = async () => {
-    setLeaving(true);
-    await request('room:leave');
-    onLeft();
+  // 판이 끝나면 열려 있던 확인창은 닫아요 (예: 확인하는 사이 상대가 5목을 완성).
+  useEffect(() => {
+    if (over) setConfirming(null);
+  }, [over]);
+
+  const handleConfirm = async () => {
+    if (!confirming) return;
+    setConfirmBusy(true);
+    setConfirmError(null);
+    if (confirming === 'leave') {
+      // 대국 중에 나가면 서버가 기권으로 처리해요.
+      await request('room:leave');
+      onLeft();
+      return;
+    }
+    const result = await request('game:resign');
+    setConfirmBusy(false);
+    if (result.ok) setConfirming(null);
+    else setConfirmError(result.error);
   };
+
+  const openConfirm = (kind: Confirming) => {
+    setConfirmError(null);
+    setConfirming(kind);
+  };
+
+  // 상대가 나간 이유: 두는 중에 나가면 game:over의 reason, 결과 화면에서 나가면 opponent:left
+  const opponentGone: OpponentGone | null =
+    opponentLeft ?? (over?.reason === 'left' || over?.reason === 'disconnect' ? over.reason : null);
 
   const sideState = (stone: Stone) => {
     const color = STONE_LABEL[stone];
-    if (over) return color;
+    if (over) {
+      if (stone === opponent && opponentGone) return `${color} · ${GONE_LABEL[opponentGone]}`;
+      if (over.reason === 'resign' && over.winner !== stone) return `${color} · ${GONE_LABEL.resign}`;
+      return color;
+    }
     if (game.turn !== stone) return `${color} · 기다리는 중`;
     return stone === me ? `${color} · 내 차례` : `${color} · 두는 중`;
   };
@@ -79,11 +120,19 @@ export const GameScreen = ({ status, game, over, onLeft }: Props) => {
 
   return (
     <div className="screen game">
-      <Marquee status={status} trailing={<span className="t-body num game__count">{game.moveCount}수</span>}>
+      <Marquee
+        status={status}
+        trailing={
+          <>
+            <span className="t-body num game__count">{game.moveCount}수</span>
+            {!over && <GameMenu onResign={() => openConfirm('resign')} onLeave={() => openConfirm('leave')} />}
+          </>
+        }
+      >
         <h1 className="t-title marquee__grow">{game.hostNickname}의 방</h1>
       </Marquee>
 
-      <main className="game__layout">
+      <main className={over ? 'game__layout game__layout--over' : 'game__layout'}>
         <PlayerSide
           className="game__opponent"
           stone={opponent}
@@ -121,9 +170,18 @@ export const GameScreen = ({ status, game, over, onLeft }: Props) => {
           trailing={over ? <ResultStamp stone={me} over={over} /> : undefined}
         />
 
-        <section className="game__dock" aria-live="polite">
+        <section className={over ? 'game__dock game__dock--result' : 'game__dock'} aria-live="polite">
           {over ? (
-            <OverSummary over={over} me={me} opponentName={opponentName} leaving={leaving} onLeave={() => void handleLeave()} />
+            <ResultSheet
+              over={over}
+              me={me}
+              opponentName={opponentName}
+              isHost={isHost}
+              rematch={rematch}
+              opponentGone={opponentGone}
+              onLeft={onLeft}
+              onReopened={onReopened}
+            />
           ) : myTurn ? (
             <>
               <div className="legend t-body muted">
@@ -181,6 +239,31 @@ export const GameScreen = ({ status, game, over, onLeft }: Props) => {
           )}
         </section>
       </main>
+
+      {confirming === 'resign' && (
+        <ConfirmDialog
+          title="기권할까요?"
+          description={`이번 판은 ${opponentName} 님의 승리로 끝나요. 결과 화면에서 재대결을 요청할 수 있어요.`}
+          cancelLabel="계속 두기"
+          confirmLabel="기권하기"
+          busy={confirmBusy}
+          error={confirmError && errorMessage(confirmError)}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => void handleConfirm()}
+        />
+      )}
+      {confirming === 'leave' && (
+        <ConfirmDialog
+          title="방에서 나갈까요?"
+          description="대국 중에 나가면 기권으로 처리돼요."
+          cancelLabel="계속 두기"
+          confirmLabel="기권하고 나가기"
+          busy={confirmBusy}
+          error={confirmError && errorMessage(confirmError)}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => void handleConfirm()}
+        />
+      )}
     </div>
   );
 };
@@ -191,51 +274,4 @@ const ResultStamp = ({ stone, over }: { stone: Stone; over: GameOverPayload }) =
   const onPaper = stone === 'white';
   const className = won ? 'stamp stamp--lamp' : onPaper ? 'stamp stamp--ink' : 'stamp';
   return <span className={className}>{won ? '승리' : '패배'}</span>;
-};
-
-/**
- * 3단계의 임시 결과 표시예요. 06 결과 시트(재대결 포함)는 4단계에서 이 자리를 대신해요.
- */
-const OverSummary = ({
-  over,
-  me,
-  opponentName,
-  leaving,
-  onLeave,
-}: {
-  over: GameOverPayload;
-  me: Stone;
-  opponentName: string;
-  leaving: boolean;
-  onLeave: () => void;
-}) => {
-  const won = over.winner === me;
-  const title =
-    over.winner === null
-      ? '비겼어요'
-      : over.reason === 'left'
-        ? `${opponentName} 님이 방을 나가서 이겼어요`
-        : over.reason === 'disconnect'
-          ? `${opponentName} 님의 연결이 끊겨서 이겼어요`
-          : won
-            ? '승리했어요'
-            : '졌어요';
-  const summary =
-    over.reason === 'five' && over.winningLine && over.winner
-      ? `${STONE_LABEL[over.winner]} ${DIRECTION_LABEL[over.winningLine.direction]} 5목 완성 · 총 ${over.moveCount}수`
-      : over.reason === 'draw'
-        ? `판이 가득 찼어요 · 총 ${over.moveCount}수`
-        : `총 ${over.moveCount}수`;
-
-  return (
-    <>
-      <div className="game__result">
-        <p className={won ? 't-big accent' : 't-big'}>{title}</p>
-        <p className="t-body muted">{summary}</p>
-      </div>
-      <button className="btn btn--ghost btn--wide" type="button" onClick={onLeave} disabled={leaving}>
-        로비로 나가기
-      </button>
-    </>
-  );
 };

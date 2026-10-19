@@ -1,7 +1,8 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, type RenderResult } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBoard, type GameOverPayload, type GameStatePayload, type Stone } from '@gomoku/shared';
+import type { ComponentProps } from 'react';
 import { request } from '../lib/request';
 import { GameScreen } from './GameScreen';
 
@@ -27,10 +28,23 @@ const withStones = (stones: [number, number, Stone][]) => {
   return board;
 };
 
-const renderGame = (game: GameStatePayload, over: GameOverPayload | null = null) => {
-  const onLeft = vi.fn();
-  const utils = render(<GameScreen status="connected" game={game} over={over} onLeft={onLeft} />);
-  return { ...utils, onLeft, user: userEvent.setup() };
+type GameProps = ComponentProps<typeof GameScreen>;
+
+const renderGame = (game: GameStatePayload, over: GameOverPayload | null = null, extra: Partial<GameProps> = {}) => {
+  const props: GameProps = {
+    status: 'connected',
+    game,
+    over,
+    isHost: true,
+    rematch: [],
+    opponentLeft: null,
+    onLeft: vi.fn(),
+    onReopened: vi.fn(),
+    ...extra,
+  };
+  const utils: RenderResult = render(<GameScreen {...props} />);
+  const rerenderWith = (next: Partial<GameProps>) => utils.rerender(<GameScreen {...props} {...next} />);
+  return { ...utils, props, rerenderWith, onLeft: props.onLeft, user: userEvent.setup() };
 };
 
 const cell = (label: string) => screen.getByRole('gridcell', { name: new RegExp(`^${label},`) });
@@ -108,17 +122,10 @@ describe('GameScreen', () => {
   });
 
   it('새 수가 오면 고른 자리를 지워요', async () => {
-    const { user, rerender, onLeft } = renderGame(state());
+    const { user, rerenderWith } = renderGame(state());
     await user.click(cell('G7'));
 
-    rerender(
-      <GameScreen
-        status="connected"
-        game={state({ moveCount: 2, board: withStones([[0, 0, 'black'], [0, 1, 'white']]) })}
-        over={null}
-        onLeft={onLeft}
-      />,
-    );
+    rerenderWith({ game: state({ moveCount: 2, board: withStones([[0, 0, 'black'], [0, 1, 'white']]) }) });
 
     expect(screen.getByRole('button', { name: '자리를 골라요' })).toBeDisabled();
   });
@@ -157,25 +164,25 @@ describe('GameScreen', () => {
       expect(screen.getByText('졌어요')).toBeInTheDocument();
     });
 
-    it('무승부와 상대가 나간 경우 문구가 달라요', () => {
-      const { rerender, onLeft } = renderGame(state({ moveCount: 225 }), {
-        winner: null,
-        reason: 'draw',
-        winningLine: null,
-        moveCount: 225,
-      });
+    it('무승부면 비겼어요와 양쪽 무승부 도장을 보여줘요', () => {
+      renderGame(state({ moveCount: 225 }), { winner: null, reason: 'draw', winningLine: null, moveCount: 225 });
+
       expect(screen.getByText('비겼어요')).toBeInTheDocument();
       expect(screen.getByText('판이 가득 찼어요 · 총 225수')).toBeInTheDocument();
+      expect(screen.getAllByText('무승부')).toHaveLength(2);
+    });
 
-      rerender(
-        <GameScreen
-          status="connected"
-          game={state({ moveCount: 4 })}
-          over={{ winner: 'black', reason: 'left', winningLine: null, moveCount: 4 }}
-          onLeft={onLeft}
-        />,
-      );
-      expect(screen.getByText('도윤 님이 방을 나가서 이겼어요')).toBeInTheDocument();
+    it('상대가 기권하면 승리 링 없이 이유를 보여줘요', () => {
+      renderGame(state({ moveCount: 12 }), { winner: 'black', reason: 'resign', winningLine: null, moveCount: 12 });
+
+      expect(screen.getByText('승리했어요')).toBeInTheDocument();
+      expect(screen.getByText('도윤 님이 기권했어요 · 총 12수')).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: '백 도윤' })).getByText('백 · 기권')).toBeInTheDocument();
+    });
+
+    it('대국이 끝나면 ⋮ 메뉴가 사라져요', () => {
+      renderGame(state({ moveCount: 13 }), fiveOver);
+      expect(screen.queryByRole('button', { name: '대국 메뉴' })).not.toBeInTheDocument();
     });
 
     it('로비로 나가기를 누르면 방에서 나가요', async () => {
@@ -185,6 +192,118 @@ describe('GameScreen', () => {
 
       expect(mockRequest).toHaveBeenCalledWith('room:leave');
       expect(onLeft).toHaveBeenCalled();
+    });
+  });
+
+  describe('재대결', () => {
+    const over: GameOverPayload = { winner: 'white', reason: 'five', winningLine: null, moveCount: 30 };
+
+    it('아무도 요청하지 않았으면 재대결 요청 버튼이 있어요', async () => {
+      const { user } = renderGame(state({ moveCount: 30 }), over);
+
+      expect(screen.getByText('아직 아무도 재대결을 요청하지 않았어요')).toBeInTheDocument();
+      expect(screen.getByText('재대결하면 흑과 백이 바뀌어요')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: '재대결 요청' }));
+      expect(mockRequest).toHaveBeenCalledWith('rematch:request');
+    });
+
+    it('상대가 요청했으면 알려주고 수락 버튼이 돼요', () => {
+      renderGame(state({ moveCount: 30 }), over, { rematch: ['white'] });
+
+      expect(screen.getByText('도윤 님이 재대결을 원해요')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '재대결 수락' })).toBeEnabled();
+    });
+
+    it('내가 요청했으면 상대의 답을 기다려요', () => {
+      renderGame(state({ moveCount: 30 }), over, { rematch: ['black'] });
+
+      expect(screen.getByText('도윤 님의 답을 기다리고 있어요')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '답을 기다리는 중' })).toBeDisabled();
+    });
+  });
+
+  describe('상대가 나갔을 때', () => {
+    const over: GameOverPayload = { winner: 'black', reason: 'five', winningLine: null, moveCount: 20 };
+
+    it('방장이면 재대결 없이 대기실로 돌아가거나 로비로 나갈 수 있어요', async () => {
+      const room = { id: 'r1', hostNickname: '지니', createdAt: 0, status: 'waiting' as const };
+      mockRequest.mockResolvedValue({ ok: true, data: room });
+      const { user, props } = renderGame(state({ moveCount: 20 }), over, { opponentLeft: 'left' });
+
+      expect(screen.getByText('도윤 님이 방을 나가서 재대결할 수 없어요')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /재대결/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '로비로 나가기' })).toBeInTheDocument();
+      expect(within(screen.getByRole('region', { name: '백 도윤' })).getByText('백 · 방을 나감')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: '대기실로 돌아가기' }));
+
+      expect(mockRequest).toHaveBeenCalledWith('room:reopen');
+      expect(props.onReopened).toHaveBeenCalledWith(room);
+    });
+
+    it('참가자면 로비로 나가기만 있어요', () => {
+      renderGame(state({ you: 'white', moveCount: 20 }), { ...over, winner: 'white', reason: 'left' }, { isHost: false });
+
+      expect(screen.getByText('지니 님이 방을 나갔어요 · 총 20수')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '대기실로 돌아가기' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '로비로 나가기' })).toBeInTheDocument();
+    });
+
+    it('연결이 끊긴 경우 문구가 달라요', () => {
+      renderGame(state({ moveCount: 20 }), over, { opponentLeft: 'disconnect' });
+      expect(screen.getByText('도윤 님의 연결이 끊겨서 재대결할 수 없어요')).toBeInTheDocument();
+    });
+  });
+
+  describe('⋮ 메뉴와 확인창', () => {
+    it('메뉴에서 기권을 고르면 확인창을 거쳐 기권해요', async () => {
+      const { user } = renderGame(state({ moveCount: 4 }));
+
+      await user.click(screen.getByRole('button', { name: '대국 메뉴' }));
+      expect(screen.getByRole('menuitem', { name: /기권하기/ })).toHaveFocus();
+      await user.click(screen.getByRole('menuitem', { name: /기권하기/ }));
+
+      const dialog = screen.getByRole('alertdialog', { name: '기권할까요?' });
+      expect(dialog).toHaveTextContent('이번 판은 도윤 님의 승리로 끝나요.');
+      expect(within(dialog).getByRole('button', { name: '계속 두기' })).toHaveFocus();
+      expect(mockRequest).not.toHaveBeenCalled();
+
+      await user.click(within(dialog).getByRole('button', { name: '기권하기' }));
+      expect(mockRequest).toHaveBeenCalledWith('game:resign');
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+
+    it('계속 두기나 Esc를 누르면 아무 일 없이 닫혀요', async () => {
+      const { user } = renderGame(state({ moveCount: 4 }));
+
+      await user.click(screen.getByRole('button', { name: '대국 메뉴' }));
+      await user.click(screen.getByRole('menuitem', { name: /기권하기/ }));
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('방 나가기는 기권 처리 안내 후 나가요', async () => {
+      const { user, onLeft } = renderGame(state({ moveCount: 4 }));
+
+      await user.click(screen.getByRole('button', { name: '대국 메뉴' }));
+      await user.click(screen.getByRole('menuitem', { name: /방 나가기/ }));
+      const dialog = screen.getByRole('alertdialog', { name: '방에서 나갈까요?' });
+      await user.click(within(dialog).getByRole('button', { name: '기권하고 나가기' }));
+
+      expect(mockRequest).toHaveBeenCalledWith('room:leave');
+      expect(onLeft).toHaveBeenCalled();
+    });
+
+    it('메뉴는 Esc로 닫히고 ⋮ 버튼으로 포커스가 돌아가요', async () => {
+      const { user } = renderGame(state({ moveCount: 4 }));
+
+      await user.click(screen.getByRole('button', { name: '대국 메뉴' }));
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '대국 메뉴' })).toHaveFocus();
     });
   });
 });

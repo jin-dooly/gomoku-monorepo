@@ -91,6 +91,34 @@
   color: var(--color-paper-muted);
 }
 
+/*
+ * 모바일에서 판이 끝나면 결과 시트가 들어갈 자리를 만들어요.
+ * 판 위아래 여백, 진영 패널 높이, 결과 제목(33px = Galmuri11 × 3)을 조금씩 줄여 한 화면에 담아요.
+ */
+@media (max-width: 1023px) {
+  .game__layout--over .game__board {
+    margin: 16px auto;
+  }
+
+  .game__layout--over .side {
+    min-height: 60px;
+  }
+
+  .game__dock--result {
+    gap: 10px;
+    padding-top: 12px;
+    padding-bottom: 16px;
+  }
+
+  .game__dock--result .result {
+    gap: 10px;
+  }
+
+  .game__dock--result .result h2 {
+    font-size: 33px;
+  }
+}
+
 @media (min-width: 1024px) {
   .game__layout {
     display: grid;

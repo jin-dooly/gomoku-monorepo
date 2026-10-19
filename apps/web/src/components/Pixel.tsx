@@ -70,6 +70,40 @@ const ICONS = {
       <rect x="3" y="6" width="1" height="1" />
     </>
   ),
+  menu: (
+    <>
+      <rect x="3" y="0" width="2" height="2" />
+      <rect x="3" y="3" width="2" height="2" />
+      <rect x="3" y="6" width="2" height="2" />
+    </>
+  ),
+  flag: (
+    <>
+      <rect x="1" y="0" width="1" height="8" />
+      <rect x="2" y="0" width="5" height="1" />
+      <rect x="2" y="1" width="4" height="2" />
+      <rect x="2" y="3" width="5" height="1" />
+    </>
+  ),
+  door: (
+    <>
+      <rect x="0" y="0" width="4" height="1" />
+      <rect x="0" y="7" width="4" height="1" />
+      <rect x="0" y="1" width="1" height="6" />
+      <rect x="3" y="3" width="5" height="2" />
+      <rect x="6" y="2" width="1" height="4" />
+    </>
+  ),
+  book: (
+    <>
+      <rect x="1" y="0" width="6" height="1" />
+      <rect x="1" y="7" width="6" height="1" />
+      <rect x="1" y="1" width="1" height="6" />
+      <rect x="6" y="1" width="1" height="6" />
+      <rect x="3" y="2" width="2" height="1" />
+      <rect x="3" y="4" width="2" height="1" />
+    </>
+  ),
   hourglass: (
     <>
       <rect x="0" y="0" width="7" height="1" />
@@ -88,6 +122,10 @@ const ICONS = {
 const VIEWBOX: Record<keyof typeof ICONS, string> = {
   refresh: '0 0 8 8',
   back: '0 0 8 8',
+  menu: '0 0 8 8',
+  flag: '0 0 8 8',
+  door: '0 0 8 8',
+  book: '0 0 8 8',
   hourglass: '0 0 7 7',
 };
 
