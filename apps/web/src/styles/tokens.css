@@ -22,7 +22,7 @@
   --color-coin: #ffc93c; /* 누를 수 있는 것에만 */
   --color-coin-shade: #c98a12;
   --color-lamp: #3fd6c6; /* 차례, 연결됨, 승리 링, 미리보기 */
-  --color-lamp-deep: #1e8c82; /* 종이 위 램프 */
+  --color-lamp-deep: #17736b; /* 종이 위 램프. 14px 글자도 4.5:1 이상 */
   --color-ember: #ff6b3d; /* 마지막 수, 남은 시간 15초 미만 */
   --color-stamp: #f0555a; /* 도장, 되돌릴 수 없는 버튼 */
   --color-stamp-shade: #a8323a;

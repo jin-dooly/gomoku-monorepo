@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { PixelStone } from '../components/Pixel';
-import { request } from '../lib/request';
 import './VersusScreen.css';
 
 /** VS 화면을 보여주는 시간 (ux-spec 4장 VS 화면, 약 2초) */
@@ -9,27 +8,18 @@ export const VERSUS_MS = 2000;
 type Props = {
   black: string;
   white: string;
-  onLeft: () => void;
+  onDone: () => void;
 };
 
-/**
- * 수락 직후 VS 화면. 위는 백(2P), 아래는 흑(1P, 먼저 둬요).
- * 대국 화면(3단계)이 생기기 전까지는 2초 뒤에 안내와 [방 나가기]를 보여줘요.
- */
-export const VersusScreen = ({ black, white, onLeft }: Props) => {
-  const [elapsed, setElapsed] = useState(false);
-  const [leaving, setLeaving] = useState(false);
+/** 수락 직후 VS 화면. 위는 백(2P), 아래는 흑(1P, 먼저 둬요). 2초 뒤 대국 화면으로 넘어가요. */
+export const VersusScreen = ({ black, white, onDone }: Props) => {
+  const done = useRef(onDone);
+  done.current = onDone;
 
   useEffect(() => {
-    const id = setTimeout(() => setElapsed(true), VERSUS_MS);
+    const id = setTimeout(() => done.current(), VERSUS_MS);
     return () => clearTimeout(id);
   }, []);
-
-  const handleLeave = async () => {
-    setLeaving(true);
-    await request('room:leave');
-    onLeft();
-  };
 
   return (
     <main className="versus" aria-label={`대국 시작: ${black} 대 ${white}`}>
@@ -53,18 +43,9 @@ export const VersusScreen = ({ black, white, onLeft }: Props) => {
           <PixelStone stone="black" size={100} onDark />
           <span className="tag tag--lamp versus__tag">1P</span>
         </div>
-        <div className="versus__foot" role="status">
-          {elapsed ? (
-            <>
-              <p className="t-body muted">대국 화면은 다음 단계에서 만들어요</p>
-              <button className="btn btn--ghost" type="button" onClick={() => void handleLeave()} disabled={leaving}>
-                방 나가기
-              </button>
-            </>
-          ) : (
-            <p className="t-body muted">곧 시작해요</p>
-          )}
-        </div>
+        <p className="t-body muted versus__foot" role="status">
+          곧 시작해요
+        </p>
       </section>
     </main>
   );

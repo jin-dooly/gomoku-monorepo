@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { JoinRequestTicket, RoomSummary } from '@gomoku/shared';
+import type { GameOverPayload, GameStatePayload, JoinRequestTicket, RoomSummary } from '@gomoku/shared';
 import { useConnectionStatus } from './hooks/useConnectionStatus';
 import { useSocketEvent } from './hooks/useSocketEvent';
 import { HomeScreen } from './screens/HomeScreen';
@@ -7,35 +7,46 @@ import { HostWaitingScreen } from './screens/HostWaitingScreen';
 import { GuestWaitingScreen } from './screens/GuestWaitingScreen';
 import { JoinFailedScreen, type FailedResolution } from './screens/JoinFailedScreen';
 import { VersusScreen } from './screens/VersusScreen';
+import { GameScreen } from './screens/GameScreen';
 
 type Screen =
   | { name: 'home' }
   | { name: 'host-waiting'; room: RoomSummary }
   | { name: 'guest-waiting'; ticket: JoinRequestTicket }
   | { name: 'join-failed'; room: RoomSummary; resolution: FailedResolution }
-  | { name: 'versus'; black: string; white: string };
+  | { name: 'versus'; black: string; white: string }
+  | { name: 'game' };
 
 const NOTICES = {
   disconnected: '서버와 연결이 끊겨서 방에서 나왔어요. 다시 연결되면 새로 시작해 주세요.',
-  opponentLeft: '상대가 방을 나가서 대국이 끝났어요.',
-  opponentDisconnected: '상대의 연결이 끊겨서 대국이 끝났어요.',
 } as const;
+
+const IN_ROOM: Screen['name'][] = ['host-waiting', 'guest-waiting', 'versus', 'game'];
 
 function App() {
   const status = useConnectionStatus();
   const [nickname, setNickname] = useState('');
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [notice, setNotice] = useState<string | null>(null);
+  /** 수락하는 순간부터 서버가 보내는 판 상태. VS 화면 동안에도 받아 둬요. */
+  const [game, setGame] = useState<GameStatePayload | null>(null);
+  const [over, setOver] = useState<GameOverPayload | null>(null);
 
   const go = (next: Screen) => {
     setNotice(null);
     setScreen(next);
   };
-  const goHome = () => go({ name: 'home' });
+  const goHome = () => {
+    setGame(null);
+    setOver(null);
+    go({ name: 'home' });
+  };
 
   // 연결이 끊기면 서버가 방과 요청을 정리해요. 재접속 유예(ux-spec 5단계)가 생기기 전까지는 홈으로 돌아가요.
   useEffect(() => {
-    if (status !== 'connected' && screen.name !== 'home' && screen.name !== 'join-failed') {
+    if (status !== 'connected' && IN_ROOM.includes(screen.name)) {
+      setGame(null);
+      setOver(null);
       setScreen({ name: 'home' });
       setNotice(NOTICES.disconnected);
     }
@@ -49,11 +60,16 @@ function App() {
     else go({ name: 'join-failed', room, resolution });
   });
 
-  // 3단계 전까지 game:over는 상대가 나가거나 연결이 끊긴 경우에만 와요.
-  useSocketEvent('game:over', ({ reason }) => {
-    if (screen.name !== 'versus') return;
-    setScreen({ name: 'home' });
-    setNotice(reason === 'disconnect' ? NOTICES.opponentDisconnected : NOTICES.opponentLeft);
+  useSocketEvent('game:state', (state) => {
+    // 새 판이 시작되면(수 수 0) 지난 결과를 지워요.
+    if (state.moveCount === 0) setOver(null);
+    setGame(state);
+  });
+
+  useSocketEvent('game:over', (payload) => {
+    setOver(payload);
+    // VS 화면 중에 끝나도(상대가 바로 나감) 결과를 볼 수 있게 대국 화면으로 넘어가요.
+    if (screen.name === 'versus') setScreen({ name: 'game' });
   });
 
   const onRoomCreated = (room: RoomSummary) => go({ name: 'host-waiting', room });
@@ -82,7 +98,16 @@ function App() {
         />
       );
     case 'versus':
-      return <VersusScreen black={screen.black} white={screen.white} onLeft={goHome} />;
+      return <VersusScreen black={screen.black} white={screen.white} onDone={() => setScreen({ name: 'game' })} />;
+    case 'game':
+      // 판 상태는 수락 직후에 오므로 VS 화면이 끝날 때쯤엔 있어요. 혹시 없으면 VS 화면처럼 기다려요.
+      return game ? (
+        <GameScreen status={status} game={game} over={over} onLeft={goHome} />
+      ) : (
+        <p className="t-body muted" role="status" style={{ padding: 24 }}>
+          판을 준비하고 있어요
+        </p>
+      );
     case 'home':
       return (
         <HomeScreen
