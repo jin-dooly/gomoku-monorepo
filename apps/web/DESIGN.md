@@ -42,7 +42,8 @@
 | `.btn--row`, `.chip` | Galmuri9 18px | 목록 행의 작은 버튼, "대국 중" |
 
 - 숫자(시간, 수 수, 개수)는 `.num`(`tabular-nums`)을 붙여요.
-- 폰트 파일은 합쳐서 약 1.6MB예요. 배포 전에 쓰는 글자만 남기는 서브셋을 고려해요.
+- 폰트는 잘라서 써요(`scripts/subset-fonts.py`, 원본은 `fonts-src/galmuri/`). 글꼴마다 **core**(ASCII + 화면 문구 글자, 약 12KB)는 항상 받고, 나머지 한글은 **ext-1~8**(각 약 20KB)로 나눠 `unicode-range`로 닉네임에 쓰인 조각만 받아요. 한자와 가나는 넣지 않아요. 원본 합계 1.6MB → 첫 화면 약 40KB.
+- 화면 문구에 새 글자가 생기면 `src/styles/fonts.test.ts`가 실패해요. 그때 스크립트를 다시 돌려요(`src/styles/fonts.css`는 스크립트가 만들어요).
 
 ## 부품 (`src/styles/components.css`)
 
