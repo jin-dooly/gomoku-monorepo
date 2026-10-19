@@ -45,7 +45,7 @@ A small, focused, well-crafted real-time game rather than a feature-heavy game p
 
 ## Brand Commitments
 
-- Product name in use: "오목 게임" (page title "Gomoku Game"). No logo or other brand assets exist yet.
+- Product name: "오목" (page title and share previews). Icon: a pixel black stone over a white stone (`apps/web/scripts/make-icons.py`).
 - Visual world: pixel-art "2P arcade versus" (black/white faction panels, a cyan turn lamp, yellow reserved for pressable controls), set in the Galmuri pixel font. Values live in `docs/ux-spec.md` §5; the mockup is https://claude.ai/artifact/BTsJtEEcTz7gAi2ADuFwDD
 
 ## Evidence on Hand
