@@ -1,5 +1,6 @@
 import type { Board, Position, Stone, WinningLine } from '../game/rules';
 import type {
+  ClientErrorPayload,
   GameMovePayload,
   JoinDecisionPayload,
   JoinRequestPayload,
@@ -162,6 +163,9 @@ export interface ClientToServerEvents {
   'game:resign': (ack: AckCallback) => void;
 
   'rematch:request': (ack: AckCallback) => void;
+
+  /** 브라우저 오류 보고. 답은 없어요. */
+  'client:error': (payload: ClientErrorPayload) => void;
 }
 
 export interface ServerToClientEvents {

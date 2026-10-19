@@ -33,7 +33,18 @@ export const JoinDecisionPayloadSchema = z.object({ requestId: IdSchema });
 
 export const GameMovePayloadSchema = PositionSchema;
 
+/** 브라우저에서 난 오류를 서버 로그로 보내요(외부 서비스 없이). 길이를 잘라서 받아요. */
+export const ClientErrorPayloadSchema = z.object({
+  kind: z.enum(['error', 'unhandledrejection', 'render']),
+  message: z.string().max(500),
+  stack: z.string().max(4000).optional(),
+  /** 화면 이름이나 경로 */
+  where: z.string().max(200).optional(),
+  userAgent: z.string().max(300).optional(),
+});
+
 export type RoomCreatePayload = z.infer<typeof RoomCreatePayloadSchema>;
 export type JoinRequestPayload = z.infer<typeof JoinRequestPayloadSchema>;
 export type JoinDecisionPayload = z.infer<typeof JoinDecisionPayloadSchema>;
 export type GameMovePayload = z.infer<typeof GameMovePayloadSchema>;
+export type ClientErrorPayload = z.infer<typeof ClientErrorPayloadSchema>;

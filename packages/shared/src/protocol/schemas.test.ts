@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GameMovePayloadSchema, JoinRequestPayloadSchema, NicknameSchema } from './schemas';
+import { ClientErrorPayloadSchema, GameMovePayloadSchema, JoinRequestPayloadSchema, NicknameSchema } from './schemas';
 
 describe('NicknameSchema', () => {
   it('2–10자를 받아요', () => {
@@ -42,5 +42,13 @@ describe('GameMovePayloadSchema', () => {
     expect(GameMovePayloadSchema.safeParse({ row: 15, col: 0 }).success).toBe(false);
     expect(GameMovePayloadSchema.safeParse({ row: 1.5, col: 0 }).success).toBe(false);
     expect(GameMovePayloadSchema.safeParse({ row: '1', col: 0 }).success).toBe(false);
+  });
+});
+
+describe('ClientErrorPayloadSchema', () => {
+  it('정해진 종류와 길이 안에서만 받아요', () => {
+    expect(ClientErrorPayloadSchema.safeParse({ kind: 'error', message: 'boom' }).success).toBe(true);
+    expect(ClientErrorPayloadSchema.safeParse({ kind: 'other', message: 'boom' }).success).toBe(false);
+    expect(ClientErrorPayloadSchema.safeParse({ kind: 'error', message: 'x'.repeat(501) }).success).toBe(false);
   });
 });
