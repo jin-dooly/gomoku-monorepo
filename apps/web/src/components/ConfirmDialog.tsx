@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { trapTab } from '../lib/focusTrap';
 import './ConfirmDialog.css';
 
 type Props = {
@@ -33,19 +34,7 @@ export const ConfirmDialog = ({ title, description, cancelLabel, confirmLabel, b
       e.preventDefault();
       onCancel();
     }
-    // 확인창 안에서만 Tab이 돌게 해요.
-    if (e.key === 'Tab') {
-      const buttons = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled)')];
-      const first = buttons[0];
-      const last = buttons[buttons.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last?.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first?.focus();
-      }
-    }
+    trapTab(e);
   };
 
   return (

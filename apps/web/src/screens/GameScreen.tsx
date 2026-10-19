@@ -210,6 +210,8 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
             </p>
           ) : myTurn ? (
             <>
+              {/* 화면 낭독기: 차례가 넘어오면 상대가 어디에 뒀는지 함께 읽어요 */}
+              <p className="sr-only">내 차례예요{lastLabel ? ` · ${lastLabel}` : ''}</p>
               <div className="legend t-body muted">
                 <span>
                   <i className="mk-last" />
