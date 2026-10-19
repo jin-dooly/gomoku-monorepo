@@ -20,6 +20,9 @@ const MESSAGES: Record<RequestErrorCode, string> = {
   'not-your-turn': '지금은 상대 차례예요.',
   'game-not-playing': '대국 중이 아니에요.',
   occupied: '이미 돌이 있는 자리예요.',
+  'game-in-progress': '대국이 끝난 뒤에 할 수 있어요.',
+  'no-opponent': '상대가 방을 나가서 재대결할 수 없어요.',
+  'opponent-present': '상대가 아직 방에 있어요.',
   timeout: '서버가 답하지 않아요. 잠시 후 다시 해 주세요.',
   offline: '서버에 연결되지 않았어요. 연결되면 다시 해 주세요.',
 };

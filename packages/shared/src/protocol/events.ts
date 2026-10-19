@@ -24,7 +24,13 @@ export type ErrorCode =
   | 'not-host'
   | 'not-your-turn'
   | 'game-not-playing'
-  | 'occupied';
+  | 'occupied'
+  /** 대국이 아직 끝나지 않았어요 (재대결 요청, 대기실로 돌아가기) */
+  | 'game-in-progress'
+  /** 상대가 방을 나가서 재대결할 수 없어요 */
+  | 'no-opponent'
+  /** 상대가 아직 방에 있어서 대기실로 돌아갈 수 없어요 */
+  | 'opponent-present';
 
 export type Ack<T = void> = { ok: true; data: T } | { ok: false; error: ErrorCode };
 export type AckCallback<T = void> = (result: Ack<T>) => void;
@@ -95,6 +101,9 @@ export type RematchStatusPayload = {
   requestedBy: Stone[];
 };
 
+/** 끝난 판의 결과 화면에서 상대가 방을 나갔거나 연결이 끊겼어요. 재대결할 수 없어요. */
+export type OpponentLeftPayload = { reason: 'left' | 'disconnect' };
+
 export type OpponentDisconnectedPayload = { remainingMs: number };
 
 export interface ClientToServerEvents {
@@ -104,6 +113,8 @@ export interface ClientToServerEvents {
   'room:close': (ack: AckCallback) => void;
   /** 방에서 나가요. 대국 중이면 기권으로 처리돼요. 방장이 나가면 방이 사라져요. */
   'room:leave': (ack: AckCallback) => void;
+  /** 상대가 나간 뒤 방장이 방을 유지하고 대기실로 돌아가요. 방이 다시 '대기 중'이 돼요. */
+  'room:reopen': (ack: AckCallback<RoomSummary>) => void;
 
   'join:request': (payload: JoinRequestPayload, ack: AckCallback<JoinRequestTicket>) => void;
   'join:cancel': (ack: AckCallback) => void;
@@ -125,6 +136,8 @@ export interface ServerToClientEvents {
   'game:state': (payload: GameStatePayload) => void;
   'game:over': (payload: GameOverPayload) => void;
   'rematch:status': (payload: RematchStatusPayload) => void;
+  /** 끝난 판의 결과 화면에서 상대가 나갔어요. 두는 중에 나가면 대신 game:over(reason: left/disconnect)가 와요. */
+  'opponent:left': (payload: OpponentLeftPayload) => void;
 
   'opponent:disconnected': (payload: OpponentDisconnectedPayload) => void;
   'opponent:reconnected': () => void;
