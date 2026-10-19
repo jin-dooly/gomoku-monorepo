@@ -11,6 +11,7 @@ import {
   type GameStatePayload,
   type JoinRequestTicket,
   type JoinResolution,
+  type OpponentLeftPayload,
   type PendingJoinRequest,
   type Position,
   type RoomStatus,
@@ -60,6 +61,8 @@ export type Room = {
   requests: Map<string, JoinRequest>;
   /** 수락한 뒤부터 있어요. */
   game: Game | null;
+  /** 끝난 판에서 재대결을 요청한 사람의 이번 판 색 */
+  rematch: Set<Stone>;
 };
 
 export type RoomEvent =
@@ -70,7 +73,11 @@ export type RoomEvent =
   /** 한 사람에게 판 상태를 보내요. 내 색(`you`)이 사람마다 달라서 따로 보내요. */
   | { type: 'game-state'; socketId: string; payload: GameStatePayload }
   /** 대국이 끝났어요. */
-  | { type: 'game-over'; socketId: string; payload: GameOverPayload };
+  | { type: 'game-over'; socketId: string; payload: GameOverPayload }
+  /** 재대결 요청 상태가 바뀌었어요. */
+  | { type: 'rematch-status'; socketId: string; requestedBy: Stone[] }
+  /** 결과 화면에서 상대가 나갔어요. */
+  | { type: 'opponent-left'; socketId: string; payload: OpponentLeftPayload };
 
 const ok = <T>(data: T): Ack<T> => ({ ok: true, data });
 const fail = <T>(error: ErrorCode): Ack<T> => ({ ok: false, error });
@@ -105,6 +112,7 @@ export class RoomService implements OnModuleDestroy {
       status: 'waiting',
       requests: new Map(),
       game: null,
+      rematch: new Set(),
     };
     this.rooms.set(room.id, room);
     this.roomIdByMember.set(socketId, room.id);
@@ -123,13 +131,31 @@ export class RoomService implements OnModuleDestroy {
   }
 
   /**
-   * 방에서 나가요.
+   * 방에서 나가요 (docs/ux-spec.md 3장 "대국 중 / 대국 후").
    * - 입장 요청을 기다리던 중이면 요청을 취소해요.
-   * - 대기실의 방장이면 방을 닫아요.
-   * - 대국 중이면 남은 사람이 이겨요(기권 처리). 재대결을 위해 방을 남기는 건 4단계에서 해요.
+   * - 방장이 나가면 방이 사라져요. 남은 참가자에게는 두는 중이면 대국 종료(승리)를, 끝난 판이면 상대가 나갔다고 알려요.
+   * - 참가자가 나가면 방장은 방에 남아요. 두는 중이면 방장이 이기고, 끝난 판이면 상대가 나갔다고 알려요.
+   *   방장은 대기실로 돌아가거나(reopen) 로비로 나가요(방 닫힘).
    */
   leave(socketId: string): Ack {
     return this.exit(socketId, 'left');
+  }
+
+  /**
+   * 상대가 나간 뒤 방장이 방을 유지하고 대기실로 돌아가요.
+   * 방이 다시 '대기 중'이 되어 목록에서 입장 요청을 받을 수 있어요.
+   */
+  reopen(hostId: string): Ack<RoomSummary> {
+    const room = this.findByMember(hostId);
+    if (!room) return fail('not-in-room');
+    if (room.host.socketId !== hostId) return fail('not-host');
+    if (room.guest) return fail('opponent-present');
+    if (room.game && !room.game.over) return fail('game-in-progress');
+
+    room.status = 'waiting';
+    room.game = null;
+    room.rematch.clear();
+    return ok(toSummary(room));
   }
 
   /** 연결이 끊긴 소켓을 정리해요. 30초 재접속 유예는 5단계에서 더해요. */
@@ -185,6 +211,50 @@ export class RoomService implements OnModuleDestroy {
     } else if (result.outcome.type === 'draw') {
       this.broadcastOver(room, { winner: null, reason: 'draw', winningLine: null, moveCount: game.moveCount });
     }
+    return ok(undefined);
+  }
+
+  /** 기권하면 이번 판만 패배로 끝나고, 둘 다 방에 남아 재대결할 수 있어요. */
+  resign(socketId: string): Ack {
+    const room = this.findByMember(socketId);
+    if (!room) return fail('not-in-room');
+    const game = room.game;
+    const stone = this.stoneOf(room, socketId);
+    if (!game || game.over || !stone) return fail('game-not-playing');
+
+    game.over = true;
+    this.broadcastOver(room, {
+      winner: oppositeStone(stone),
+      reason: 'resign',
+      winningLine: null,
+      moveCount: game.moveCount,
+    });
+    return ok(undefined);
+  }
+
+  /**
+   * 끝난 판에서 재대결을 요청해요. 두 사람이 모두 요청하면 흑과 백을 바꿔 새 판을 시작해요.
+   * 이미 요청했으면 다시 요청해도 그대로예요.
+   */
+  requestRematch(socketId: string): Ack {
+    const room = this.findByMember(socketId);
+    if (!room) return fail('not-in-room');
+    const game = room.game;
+    if (!game) return fail('game-not-playing');
+    if (!game.over) return fail('game-in-progress');
+    if (!room.guest) return fail('no-opponent');
+    const stone = this.stoneOf(room, socketId);
+    if (!stone) return fail('not-in-room');
+
+    room.rematch.add(stone);
+    if (room.rematch.size < 2) {
+      this.broadcastRematch(room);
+      return ok(undefined);
+    }
+
+    room.rematch.clear();
+    room.game = newGame({ black: game.players.white, white: game.players.black });
+    this.broadcastState(room);
     return ok(undefined);
   }
 
@@ -302,20 +372,33 @@ export class RoomService implements OnModuleDestroy {
     const room = this.findByMember(socketId);
     if (!room) return fail('not-in-room');
 
-    // 두는 중에 나가면 남은 사람이 이겨요. 이미 끝난 판(결과 화면)에서 나가는 경우는 4단계 재대결과 함께 다뤄요.
+    const isHost = room.host.socketId === socketId;
+    const other = isHost ? room.guest : room.host;
     const game = room.game;
-    if (game && !game.over) {
-      const winner = room.host.socketId === socketId ? room.guest : room.host;
-      if (winner) {
+
+    if (other && game) {
+      if (!game.over) {
+        // 두는 중에 나가면 남은 사람이 이겨요.
         game.over = true;
         this.emit({
           type: 'game-over',
-          socketId: winner.socketId,
-          payload: { winner: this.stoneOf(room, winner.socketId), reason, winningLine: null, moveCount: game.moveCount },
+          socketId: other.socketId,
+          payload: { winner: this.stoneOf(room, other.socketId), reason, winningLine: null, moveCount: game.moveCount },
         });
+      } else {
+        // 결과 화면에서 나가면 남은 사람에게 재대결할 수 없다고 알려요.
+        this.emit({ type: 'opponent-left', socketId: other.socketId, payload: { reason } });
       }
     }
-    this.removeRoom(room);
+
+    if (isHost) {
+      this.removeRoom(room);
+    } else {
+      // 참가자만 빠지고 방장은 방에 남아요. 대기실로 돌아갈지는 방장이 정해요.
+      this.roomIdByMember.delete(socketId);
+      room.guest = null;
+      room.rematch.clear();
+    }
     return ok(undefined);
   }
 
@@ -370,7 +453,15 @@ export class RoomService implements OnModuleDestroy {
   }
 
   private broadcastOver(room: Room, payload: GameOverPayload): void {
+    room.rematch.clear();
     for (const member of this.members(room)) this.emit({ type: 'game-over', socketId: member.socketId, payload });
+  }
+
+  private broadcastRematch(room: Room): void {
+    const requestedBy = [...room.rematch];
+    for (const member of this.members(room)) {
+      this.emit({ type: 'rematch-status', socketId: member.socketId, requestedBy });
+    }
   }
 
   private notifyRequests(room: Room): void {

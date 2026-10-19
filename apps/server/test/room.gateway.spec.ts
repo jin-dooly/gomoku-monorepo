@@ -154,4 +154,54 @@ describe('RoomGateway (소켓 통합)', () => {
     expect(await hostOver).toMatchObject(expected);
     expect(await guestOver).toMatchObject({ ...expected, winningLine: { direction: 'horizontal' } });
   });
+
+  /** 지니(방장, 흑)와 도윤(참가자, 백)이 대국을 시작한 상태를 만들어요. */
+  const startMatch = async () => {
+    const host = await connect();
+    const guest = await connect();
+    const created = await host.emitWithAck('room:create', { nickname: '지니' });
+    if (!created.ok) throw new Error(created.error);
+    const ticket = await guest.emitWithAck('join:request', { roomId: created.data.id, nickname: '도윤' });
+    if (!ticket.ok) throw new Error(ticket.error);
+    const started = next(guest, 'game:state');
+    await host.emitWithAck('join:accept', { requestId: ticket.data.requestId });
+    await started;
+    return { host, guest };
+  };
+
+  it('기권 → 둘 다 재대결 요청 → 색을 바꿔 새 판이 시작돼요', async () => {
+    const { host, guest } = await startMatch();
+
+    const over = next(guest, 'game:over');
+    expect(await host.emitWithAck('game:resign')).toEqual({ ok: true, data: undefined });
+    expect(await over).toEqual({ winner: 'white', reason: 'resign', winningLine: null, moveCount: 0 });
+
+    const status = next(host, 'rematch:status');
+    await guest.emitWithAck('rematch:request');
+    expect(await status).toEqual({ requestedBy: ['white'] });
+
+    const hostState = next(host, 'game:state');
+    const guestState = next(guest, 'game:state');
+    await host.emitWithAck('rematch:request');
+    expect(await hostState).toMatchObject({ you: 'white', turn: 'black', moveCount: 0 });
+    expect(await guestState).toMatchObject({ you: 'black', players: { black: { nickname: '도윤' } } });
+  });
+
+  it('결과 화면에서 참가자가 나가면 방장에게 알리고, 방장은 대기실로 돌아가 새 요청을 받아요', async () => {
+    const { host, guest } = await startMatch();
+    await host.emitWithAck('game:resign');
+
+    const left = next(host, 'opponent:left');
+    await guest.emitWithAck('room:leave');
+    expect(await left).toEqual({ reason: 'left' });
+
+    expect(await host.emitWithAck('rematch:request')).toEqual({ ok: false, error: 'no-opponent' });
+    const reopened = await host.emitWithAck('room:reopen');
+    expect(reopened).toMatchObject({ ok: true, data: { status: 'waiting' } });
+
+    const newcomer = await connect();
+    const requests = next(host, 'join:requests');
+    await newcomer.emitWithAck('join:request', { roomId: reopened.ok ? reopened.data.id : '', nickname: '하람' });
+    expect(await requests).toEqual([expect.objectContaining({ nickname: '하람' })]);
+  });
 });

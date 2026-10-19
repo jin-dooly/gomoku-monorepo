@@ -73,6 +73,11 @@ export class RoomGateway implements OnGatewayDisconnect {
     return this.rooms.leave(client.id);
   }
 
+  @SubscribeMessage('room:reopen')
+  handleReopen(@ConnectedSocket() client: GameSocket): Ack<RoomSummary> {
+    return this.rooms.reopen(client.id);
+  }
+
   // ---- 입장 요청 ----
 
   @SubscribeMessage('join:request')
@@ -110,6 +115,16 @@ export class RoomGateway implements OnGatewayDisconnect {
     return this.rooms.move(client.id, parsed.data);
   }
 
+  @SubscribeMessage('game:resign')
+  handleResign(@ConnectedSocket() client: GameSocket): Ack {
+    return this.rooms.resign(client.id);
+  }
+
+  @SubscribeMessage('rematch:request')
+  handleRematch(@ConnectedSocket() client: GameSocket): Ack {
+    return this.rooms.requestRematch(client.id);
+  }
+
   private dispatch(event: RoomEvent) {
     switch (event.type) {
       case 'requests-changed':
@@ -123,6 +138,12 @@ export class RoomGateway implements OnGatewayDisconnect {
         break;
       case 'game-over':
         this.server.to(event.socketId).emit('game:over', event.payload);
+        break;
+      case 'rematch-status':
+        this.server.to(event.socketId).emit('rematch:status', { requestedBy: event.requestedBy });
+        break;
+      case 'opponent-left':
+        this.server.to(event.socketId).emit('opponent:left', event.payload);
         break;
     }
   }
