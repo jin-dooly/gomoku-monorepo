@@ -32,15 +32,18 @@ describe('RoomGateway (소켓 통합)', () => {
     await app.close();
   });
 
-  const connect = async (): Promise<Client> => {
-    const client: Client = io(url, { transports: ['websocket'], forceNew: true });
+  /** 연결하고 서버가 준 세션 ID까지 받아요. sessionId를 주면 그 세션으로 다시 연결해요(새로고침 흉내). */
+  const connectSession = async (sessionId?: string): Promise<{ client: Client; sessionId: string }> => {
+    const client: Client = io(url, { transports: ['websocket'], forceNew: true, auth: sessionId ? { sessionId } : {} });
     clients.push(client);
-    await new Promise<void>((resolve, reject) => {
-      client.once('connect', () => resolve());
+    const assigned = await new Promise<string>((resolve, reject) => {
+      client.once('session:assigned', (p) => resolve(p.sessionId));
       client.once('connect_error', reject);
     });
-    return client;
+    return { client, sessionId: assigned };
   };
+
+  const connect = async (): Promise<Client> => (await connectSession()).client;
 
   const next = <E extends keyof ServerToClientEvents>(client: Client, event: E) =>
     new Promise<Parameters<ServerToClientEvents[E]>[0]>((resolve) => {
@@ -102,21 +105,6 @@ describe('RoomGateway (소켓 통합)', () => {
     await host.emitWithAck('room:close');
 
     expect(await result).toEqual({ resolution: 'room-closed' });
-  });
-
-  it('대국 중 상대의 연결이 끊기면 남은 사람에게 대국 종료를 보내요', async () => {
-    const host = await connect();
-    const guest = await connect();
-    const created = await host.emitWithAck('room:create', { nickname: '지니' });
-    if (!created.ok) throw new Error(created.error);
-    const ticket = await guest.emitWithAck('join:request', { roomId: created.data.id, nickname: '도윤' });
-    if (!ticket.ok) throw new Error(ticket.error);
-    await host.emitWithAck('join:accept', { requestId: ticket.data.requestId });
-
-    const over = next(host, 'game:over');
-    guest.disconnect();
-
-    expect(await over).toEqual({ winner: 'black', reason: 'disconnect', winningLine: null, moveCount: 0 });
   });
 
   it('수락하면 두 사람이 각자 색을 받고, 번갈아 두다가 5목이면 둘 다 결과를 받아요', async () => {
@@ -203,5 +191,45 @@ describe('RoomGateway (소켓 통합)', () => {
     const requests = next(host, 'join:requests');
     await newcomer.emitWithAck('join:request', { roomId: reopened.ok ? reopened.data.id : '', nickname: '하람' });
     expect(await requests).toEqual([expect.objectContaining({ nickname: '하람' })]);
+  });
+
+  describe('세션과 재접속', () => {
+    it('처음 연결하면 세션 ID를 받고, 그 ID로 다시 연결하면 같은 ID를 받아요', async () => {
+      const first = await connectSession();
+      expect(first.sessionId).toMatch(/^[0-9a-f-]{36}$/);
+
+      const again = await connectSession(first.sessionId);
+      expect(again.sessionId).toBe(first.sessionId);
+
+      const bogus = await connectSession('not-a-session');
+      expect(bogus.sessionId).not.toBe('not-a-session');
+    });
+
+    it('대국 중 상대가 끊기면 기다린다고 알리고, 같은 세션으로 돌아오면 이어서 둬요', async () => {
+      const host = await connectSession();
+      const guest = await connectSession();
+      const created = await host.client.emitWithAck('room:create', { nickname: '지니' });
+      if (!created.ok) throw new Error(created.error);
+      const ticket = await guest.client.emitWithAck('join:request', { roomId: created.data.id, nickname: '도윤' });
+      if (!ticket.ok) throw new Error(ticket.error);
+      const started = next(guest.client, 'game:state');
+      await host.client.emitWithAck('join:accept', { requestId: ticket.data.requestId });
+      await started;
+      await host.client.emitWithAck('game:move', { row: 7, col: 7 });
+
+      // 새로고침: 소켓을 닫고 같은 세션으로 새로 연결
+      const waiting = next(host.client, 'opponent:disconnected');
+      guest.client.disconnect();
+      expect(await waiting).toEqual({ remainingMs: 30_000 });
+
+      const back = next(host.client, 'opponent:reconnected');
+      const reloaded: Client = io(url, { transports: ['websocket'], forceNew: true, auth: { sessionId: guest.sessionId } });
+      clients.push(reloaded);
+      const resume = await next(reloaded, 'session:resume');
+      await back;
+
+      expect(resume).toMatchObject({ role: 'guest', game: { you: 'white', turn: 'white', moveCount: 1 }, over: null });
+      expect(await reloaded.emitWithAck('game:move', { row: 7, col: 8 })).toEqual({ ok: true, data: undefined });
+    });
   });
 });

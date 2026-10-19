@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import {
+  RECONNECT_GRACE_MS,
   createBoard,
   oppositeStone,
   placeStone,
@@ -16,11 +17,13 @@ import {
   type Position,
   type RoomStatus,
   type RoomSummary,
+  type SessionResumePayload,
   type Stone,
 } from '@gomoku/shared';
 
 /**
  * 방, 입장 요청, 대국 상태를 메모리에 둬요 (docs/ux-spec.md 3장).
+ * 플레이어는 세션 ID(playerId)로 구분해요. 새로고침해도 같은 세션이면 같은 사람이에요.
  * 소켓을 모르는 순수한 상태 관리만 하고, 누군가에게 알려야 할 일은 `RoomEvent`로 내보내요.
  * 게이트웨이가 그 이벤트를 소켓 이벤트로 바꿔 보내요.
  */
@@ -28,11 +31,11 @@ import {
 /** 입장 요청은 60초 안에 방장이 답하지 않으면 자동으로 취소돼요. */
 export const JOIN_REQUEST_TTL_MS = 60_000;
 
-export type Member = { socketId: string; nickname: string };
+export type Member = { playerId: string; nickname: string };
 
 type JoinRequest = {
   id: string;
-  socketId: string;
+  playerId: string;
   nickname: string;
   expiresAt: number;
   timer: ReturnType<typeof setTimeout>;
@@ -47,6 +50,8 @@ export type Game = {
   moveCount: number;
   lastMove: (Position & { stone: Stone }) | null;
   over: boolean;
+  /** 끝난 판의 결과. 다시 연결한 사람에게 결과 화면을 보여줄 때 써요. */
+  result: GameOverPayload | null;
 };
 
 export type Room = {
@@ -63,21 +68,29 @@ export type Room = {
   game: Game | null;
   /** 끝난 판에서 재대결을 요청한 사람의 이번 판 색 */
   rematch: Set<Stone>;
+  /** 끝난 판의 결과 화면에서 참가자가 떠났어요. 방장에게 재대결할 수 없다고 보여줘요. */
+  departed: OpponentLeftPayload['reason'] | null;
 };
 
 export type RoomEvent =
   /** 방장에게 대기 중인 요청 전체 목록을 다시 보내요. */
   | { type: 'requests-changed'; hostId: string; requests: PendingJoinRequest[] }
   /** 참가자에게 요청 결과를 알려요. */
-  | { type: 'join-resolved'; socketId: string; resolution: JoinResolution }
+  | { type: 'join-resolved'; playerId: string; resolution: JoinResolution }
   /** 한 사람에게 판 상태를 보내요. 내 색(`you`)이 사람마다 달라서 따로 보내요. */
-  | { type: 'game-state'; socketId: string; payload: GameStatePayload }
+  | { type: 'game-state'; playerId: string; payload: GameStatePayload }
   /** 대국이 끝났어요. */
-  | { type: 'game-over'; socketId: string; payload: GameOverPayload }
+  | { type: 'game-over'; playerId: string; payload: GameOverPayload }
   /** 재대결 요청 상태가 바뀌었어요. */
-  | { type: 'rematch-status'; socketId: string; requestedBy: Stone[] }
+  | { type: 'rematch-status'; playerId: string; requestedBy: Stone[] }
   /** 결과 화면에서 상대가 나갔어요. */
-  | { type: 'opponent-left'; socketId: string; payload: OpponentLeftPayload };
+  | { type: 'opponent-left'; playerId: string; payload: OpponentLeftPayload }
+  /** 상대 연결이 끊겨서 기다리는 중이에요. */
+  | { type: 'opponent-disconnected'; playerId: string; remainingMs: number }
+  /** 기다리던 상대가 돌아왔어요. */
+  | { type: 'opponent-reconnected'; playerId: string }
+  /** 다시 연결한 사람에게 지금 있던 곳을 알려줘요. */
+  | { type: 'resume'; playerId: string; payload: SessionResumePayload };
 
 const ok = <T>(data: T): Ack<T> => ({ ok: true, data });
 const fail = <T>(error: ErrorCode): Ack<T> => ({ ok: false, error });
@@ -88,7 +101,9 @@ export class RoomService implements OnModuleDestroy {
   /** 방장이나 참가자로 들어가 있는 방 */
   private readonly roomIdByMember = new Map<string, string>();
   /** 입장 요청을 보내고 기다리는 중인 방. 한 사람은 요청을 하나만 보낼 수 있어요. */
-  private readonly pendingBySocket = new Map<string, { roomId: string; requestId: string }>();
+  private readonly pendingByPlayer = new Map<string, { roomId: string; requestId: string }>();
+  /** 연결이 끊겨 돌아오기를 기다리는 사람 (30초) */
+  private readonly grace = new Map<string, { timer: ReturnType<typeof setTimeout>; until: number }>();
   private listener: (event: RoomEvent) => void = () => {};
 
   onEvent(listener: (event: RoomEvent) => void): void {
@@ -97,33 +112,36 @@ export class RoomService implements OnModuleDestroy {
 
   onModuleDestroy(): void {
     for (const room of this.rooms.values()) this.clearRequests(room);
+    for (const { timer } of this.grace.values()) clearTimeout(timer);
+    this.grace.clear();
   }
 
   // ---- 방 ----
 
-  create(socketId: string, nickname: string): Ack<RoomSummary> {
-    if (this.isBusy(socketId)) return fail('already-in-room');
+  create(playerId: string, nickname: string): Ack<RoomSummary> {
+    if (this.isBusy(playerId)) return fail('already-in-room');
 
     const room: Room = {
       id: randomUUID(),
-      host: { socketId, nickname },
+      host: { playerId, nickname },
       guest: null,
       createdAt: Date.now(),
       status: 'waiting',
       requests: new Map(),
       game: null,
       rematch: new Set(),
+      departed: null,
     };
     this.rooms.set(room.id, room);
-    this.roomIdByMember.set(socketId, room.id);
+    this.roomIdByMember.set(playerId, room.id);
     return ok(toSummary(room));
   }
 
   /** 방장이 대기실에서 방을 닫아요. 기다리던 요청은 모두 '방 닫힘'으로 끝나요. */
-  close(socketId: string): Ack {
-    const room = this.findByMember(socketId);
+  close(playerId: string): Ack {
+    const room = this.findByMember(playerId);
     if (!room) return fail('not-in-room');
-    if (room.host.socketId !== socketId) return fail('not-host');
+    if (room.host.playerId !== playerId) return fail('not-host');
     if (room.status !== 'waiting') return fail('room-not-waiting');
 
     this.removeRoom(room);
@@ -137,8 +155,8 @@ export class RoomService implements OnModuleDestroy {
    * - 참가자가 나가면 방장은 방에 남아요. 두는 중이면 방장이 이기고, 끝난 판이면 상대가 나갔다고 알려요.
    *   방장은 대기실로 돌아가거나(reopen) 로비로 나가요(방 닫힘).
    */
-  leave(socketId: string): Ack {
-    return this.exit(socketId, 'left');
+  leave(playerId: string): Ack {
+    return this.exit(playerId, 'left');
   }
 
   /**
@@ -148,19 +166,59 @@ export class RoomService implements OnModuleDestroy {
   reopen(hostId: string): Ack<RoomSummary> {
     const room = this.findByMember(hostId);
     if (!room) return fail('not-in-room');
-    if (room.host.socketId !== hostId) return fail('not-host');
+    if (room.host.playerId !== hostId) return fail('not-host');
     if (room.guest) return fail('opponent-present');
     if (room.game && !room.game.over) return fail('game-in-progress');
 
     room.status = 'waiting';
     room.game = null;
     room.rematch.clear();
+    room.departed = null;
     return ok(toSummary(room));
   }
 
-  /** 연결이 끊긴 소켓을 정리해요. 30초 재접속 유예는 5단계에서 더해요. */
-  disconnect(socketId: string): void {
-    this.exit(socketId, 'disconnect');
+  /**
+   * 이 세션의 연결이 모두 끊겼어요 (docs/ux-spec.md 3장, 07).
+   * - 입장 요청을 기다리던 중이면 요청을 바로 취소해요.
+   * - 방에 있으면 30초 동안 돌아오기를 기다리고, 상대에게 기다리는 중이라고 알려요.
+   *   그 안에 돌아오지 않으면 방에서 나간 것으로 처리해요(두는 중이면 상대 승리).
+   */
+  disconnect(playerId: string): void {
+    if (this.pendingByPlayer.has(playerId)) {
+      this.cancelJoin(playerId);
+      return;
+    }
+    const room = this.findByMember(playerId);
+    if (!room || this.grace.has(playerId)) return;
+
+    const timer = setTimeout(() => this.expireGrace(playerId), RECONNECT_GRACE_MS);
+    this.grace.set(playerId, { timer, until: Date.now() + RECONNECT_GRACE_MS });
+    const other = this.otherMember(room, playerId);
+    if (other) {
+      this.emit({ type: 'opponent-disconnected', playerId: other.playerId, remainingMs: RECONNECT_GRACE_MS });
+    }
+  }
+
+  /**
+   * 이 세션이 연결됐어요(처음, 새로고침, 순간 끊김 뒤 복구).
+   * 기다리던 중이었으면 상대에게 돌아왔다고 알리고, 방에 있으면 지금 상태를 보내요.
+   */
+  connect(playerId: string): void {
+    const room = this.findByMember(playerId);
+    const waiting = this.grace.get(playerId);
+    if (waiting) {
+      clearTimeout(waiting.timer);
+      this.grace.delete(playerId);
+      const other = room && this.otherMember(room, playerId);
+      if (other) this.emit({ type: 'opponent-reconnected', playerId: other.playerId });
+    }
+    if (room) this.emit({ type: 'resume', playerId, payload: this.snapshot(room, playerId) });
+  }
+
+  /** 연결이 끊겨 기다리는 중이면 남은 시간, 아니면 null */
+  graceRemaining(playerId: string): number | null {
+    const waiting = this.grace.get(playerId);
+    return waiting ? Math.max(0, waiting.until - Date.now()) : null;
   }
 
   /** 새로 만든 방이 위로 오게 정렬해요. */
@@ -168,16 +226,16 @@ export class RoomService implements OnModuleDestroy {
     return [...this.rooms.values()].sort((a, b) => b.createdAt - a.createdAt).map(toSummary);
   }
 
-  findByMember(socketId: string): Room | undefined {
-    const roomId = this.roomIdByMember.get(socketId);
+  findByMember(playerId: string): Room | undefined {
+    const roomId = this.roomIdByMember.get(playerId);
     return roomId ? this.rooms.get(roomId) : undefined;
   }
 
   /** 이번 판에서 이 사람의 돌 색. 대국 전이면 null이에요. */
-  stoneOf(room: Room, socketId: string): Stone | null {
+  stoneOf(room: Room, playerId: string): Stone | null {
     if (!room.game) return null;
-    if (room.game.players.black.socketId === socketId) return 'black';
-    if (room.game.players.white.socketId === socketId) return 'white';
+    if (room.game.players.black.playerId === playerId) return 'black';
+    if (room.game.players.white.playerId === playerId) return 'white';
     return null;
   }
 
@@ -187,12 +245,12 @@ export class RoomService implements OnModuleDestroy {
    * 내 차례에 빈 교차점에 돌을 둬요. 두 사람 모두에게 새 판 상태를 보내고,
    * 5목이 생기거나 판이 가득 차면 대국 종료를 보내요.
    */
-  move(socketId: string, position: Position): Ack {
-    const room = this.findByMember(socketId);
+  move(playerId: string, position: Position): Ack {
+    const room = this.findByMember(playerId);
     if (!room) return fail('not-in-room');
     const game = room.game;
     if (!game || game.over) return fail('game-not-playing');
-    if (this.stoneOf(room, socketId) !== game.turn) return fail('not-your-turn');
+    if (this.stoneOf(room, playerId) !== game.turn) return fail('not-your-turn');
 
     const stone = game.turn;
     const result = placeStone(game.board, position, stone);
@@ -215,11 +273,11 @@ export class RoomService implements OnModuleDestroy {
   }
 
   /** 기권하면 이번 판만 패배로 끝나고, 둘 다 방에 남아 재대결할 수 있어요. */
-  resign(socketId: string): Ack {
-    const room = this.findByMember(socketId);
+  resign(playerId: string): Ack {
+    const room = this.findByMember(playerId);
     if (!room) return fail('not-in-room');
     const game = room.game;
-    const stone = this.stoneOf(room, socketId);
+    const stone = this.stoneOf(room, playerId);
     if (!game || game.over || !stone) return fail('game-not-playing');
 
     game.over = true;
@@ -236,14 +294,14 @@ export class RoomService implements OnModuleDestroy {
    * 끝난 판에서 재대결을 요청해요. 두 사람이 모두 요청하면 흑과 백을 바꿔 새 판을 시작해요.
    * 이미 요청했으면 다시 요청해도 그대로예요.
    */
-  requestRematch(socketId: string): Ack {
-    const room = this.findByMember(socketId);
+  requestRematch(playerId: string): Ack {
+    const room = this.findByMember(playerId);
     if (!room) return fail('not-in-room');
     const game = room.game;
     if (!game) return fail('game-not-playing');
     if (!game.over) return fail('game-in-progress');
     if (!room.guest) return fail('no-opponent');
-    const stone = this.stoneOf(room, socketId);
+    const stone = this.stoneOf(room, playerId);
     if (!stone) return fail('not-in-room');
 
     room.rematch.add(stone);
@@ -253,15 +311,16 @@ export class RoomService implements OnModuleDestroy {
     }
 
     room.rematch.clear();
+    room.departed = null;
     room.game = newGame({ black: game.players.white, white: game.players.black });
     this.broadcastState(room);
     return ok(undefined);
   }
 
   /** 이 사람에게 보낼 판 상태예요. 대국 중이 아니면 null이에요. */
-  gameStateFor(room: Room, socketId: string): GameStatePayload | null {
+  gameStateFor(room: Room, playerId: string): GameStatePayload | null {
     const game = room.game;
-    const you = this.stoneOf(room, socketId);
+    const you = this.stoneOf(room, playerId);
     if (!game || !you) return null;
     return {
       roomId: room.id,
@@ -277,8 +336,8 @@ export class RoomService implements OnModuleDestroy {
 
   // ---- 입장 요청 ----
 
-  requestJoin(socketId: string, roomId: string, nickname: string): Ack<JoinRequestTicket> {
-    if (this.isBusy(socketId)) return fail('already-in-room');
+  requestJoin(playerId: string, roomId: string, nickname: string): Ack<JoinRequestTicket> {
+    if (this.isBusy(playerId)) return fail('already-in-room');
     const room = this.rooms.get(roomId);
     if (!room) return fail('room-not-found');
     if (room.status !== 'waiting') return fail('room-not-waiting');
@@ -286,21 +345,21 @@ export class RoomService implements OnModuleDestroy {
     const id = randomUUID();
     const request: JoinRequest = {
       id,
-      socketId,
+      playerId,
       nickname,
       expiresAt: Date.now() + JOIN_REQUEST_TTL_MS,
       timer: setTimeout(() => this.expire(room.id, id), JOIN_REQUEST_TTL_MS),
     };
     room.requests.set(id, request);
-    this.pendingBySocket.set(socketId, { roomId: room.id, requestId: id });
+    this.pendingByPlayer.set(playerId, { roomId: room.id, requestId: id });
     this.notifyRequests(room);
 
     return ok({ requestId: id, room: toSummary(room), remainingMs: JOIN_REQUEST_TTL_MS });
   }
 
   /** 참가자가 기다리다가 요청을 직접 취소해요. */
-  cancelJoin(socketId: string): Ack {
-    const pending = this.pendingBySocket.get(socketId);
+  cancelJoin(playerId: string): Ack {
+    const pending = this.pendingByPlayer.get(playerId);
     const room = pending && this.rooms.get(pending.roomId);
     if (!pending || !room) return fail('request-not-found');
 
@@ -318,11 +377,11 @@ export class RoomService implements OnModuleDestroy {
 
     const target = room.data;
     this.dropRequest(target, requestId);
-    const guest = { socketId: request.socketId, nickname: request.nickname };
+    const guest = { playerId: request.playerId, nickname: request.nickname };
     target.guest = guest;
     target.status = 'playing';
-    this.roomIdByMember.set(guest.socketId, target.id);
-    this.emit({ type: 'join-resolved', socketId: guest.socketId, resolution: 'accepted' });
+    this.roomIdByMember.set(guest.playerId, target.id);
+    this.emit({ type: 'join-resolved', playerId: guest.playerId, resolution: 'accepted' });
 
     this.resolveAll(target, 'taken');
     this.notifyRequests(target);
@@ -340,7 +399,7 @@ export class RoomService implements OnModuleDestroy {
     if (!request) return fail('request-not-found');
 
     this.dropRequest(room.data, requestId);
-    this.emit({ type: 'join-resolved', socketId: request.socketId, resolution: 'rejected' });
+    this.emit({ type: 'join-resolved', playerId: request.playerId, resolution: 'rejected' });
     this.notifyRequests(room.data);
     return ok(undefined);
   }
@@ -362,17 +421,23 @@ export class RoomService implements OnModuleDestroy {
     if (!room || !request) return;
 
     this.dropRequest(room, requestId);
-    this.emit({ type: 'join-resolved', socketId: request.socketId, resolution: 'expired' });
+    this.emit({ type: 'join-resolved', playerId: request.playerId, resolution: 'expired' });
     this.notifyRequests(room);
   }
 
-  private exit(socketId: string, reason: 'left' | 'disconnect'): Ack {
-    if (this.pendingBySocket.has(socketId)) return this.cancelJoin(socketId);
+  private expireGrace(playerId: string): void {
+    this.grace.delete(playerId);
+    this.exit(playerId, 'disconnect');
+  }
 
-    const room = this.findByMember(socketId);
+  private exit(playerId: string, reason: 'left' | 'disconnect'): Ack {
+    if (this.pendingByPlayer.has(playerId)) return this.cancelJoin(playerId);
+
+    const room = this.findByMember(playerId);
     if (!room) return fail('not-in-room');
+    this.clearGrace(playerId);
 
-    const isHost = room.host.socketId === socketId;
+    const isHost = room.host.playerId === playerId;
     const other = isHost ? room.guest : room.host;
     const game = room.game;
 
@@ -382,22 +447,24 @@ export class RoomService implements OnModuleDestroy {
         game.over = true;
         this.emit({
           type: 'game-over',
-          socketId: other.socketId,
-          payload: { winner: this.stoneOf(room, other.socketId), reason, winningLine: null, moveCount: game.moveCount },
+          playerId: other.playerId,
+          payload: { winner: this.stoneOf(room, other.playerId), reason, winningLine: null, moveCount: game.moveCount },
         });
       } else {
         // 결과 화면에서 나가면 남은 사람에게 재대결할 수 없다고 알려요.
-        this.emit({ type: 'opponent-left', socketId: other.socketId, payload: { reason } });
+        this.emit({ type: 'opponent-left', playerId: other.playerId, payload: { reason } });
       }
     }
 
     if (isHost) {
+      if (room.guest) this.clearGrace(room.guest.playerId);
       this.removeRoom(room);
     } else {
       // 참가자만 빠지고 방장은 방에 남아요. 대기실로 돌아갈지는 방장이 정해요.
-      this.roomIdByMember.delete(socketId);
+      this.roomIdByMember.delete(playerId);
       room.guest = null;
       room.rematch.clear();
+      if (room.game) room.departed = reason;
     }
     return ok(undefined);
   }
@@ -405,13 +472,13 @@ export class RoomService implements OnModuleDestroy {
   private hostedWaitingRoom(hostId: string): Ack<Room> {
     const room = this.findByMember(hostId);
     if (!room) return fail('not-in-room');
-    if (room.host.socketId !== hostId) return fail('not-host');
+    if (room.host.playerId !== hostId) return fail('not-host');
     if (room.status !== 'waiting') return fail('room-not-waiting');
     return ok(room);
   }
 
-  private isBusy(socketId: string): boolean {
-    return this.roomIdByMember.has(socketId) || this.pendingBySocket.has(socketId);
+  private isBusy(playerId: string): boolean {
+    return this.roomIdByMember.has(playerId) || this.pendingByPlayer.has(playerId);
   }
 
   private dropRequest(room: Room, requestId: string): void {
@@ -419,14 +486,14 @@ export class RoomService implements OnModuleDestroy {
     if (!request) return;
     clearTimeout(request.timer);
     room.requests.delete(requestId);
-    this.pendingBySocket.delete(request.socketId);
+    this.pendingByPlayer.delete(request.playerId);
   }
 
   /** 남은 요청을 모두 같은 결과로 끝내요. */
   private resolveAll(room: Room, resolution: JoinResolution): void {
     for (const request of [...room.requests.values()]) {
       this.dropRequest(room, request.id);
-      this.emit({ type: 'join-resolved', socketId: request.socketId, resolution });
+      this.emit({ type: 'join-resolved', playerId: request.playerId, resolution });
     }
   }
 
@@ -437,8 +504,38 @@ export class RoomService implements OnModuleDestroy {
   private removeRoom(room: Room): void {
     this.resolveAll(room, 'room-closed');
     this.rooms.delete(room.id);
-    this.roomIdByMember.delete(room.host.socketId);
-    if (room.guest) this.roomIdByMember.delete(room.guest.socketId);
+    this.roomIdByMember.delete(room.host.playerId);
+    if (room.guest) this.roomIdByMember.delete(room.guest.playerId);
+  }
+
+  private otherMember(room: Room, playerId: string): Member | null {
+    if (room.host.playerId === playerId) return room.guest;
+    if (room.guest?.playerId === playerId) return room.host;
+    return null;
+  }
+
+  private clearGrace(playerId: string): void {
+    const waiting = this.grace.get(playerId);
+    if (!waiting) return;
+    clearTimeout(waiting.timer);
+    this.grace.delete(playerId);
+  }
+
+  /** 다시 연결한 사람이 지금 있던 곳을 그대로 볼 수 있게 모아요. */
+  private snapshot(room: Room, playerId: string): SessionResumePayload {
+    const isHost = room.host.playerId === playerId;
+    const other = this.otherMember(room, playerId);
+    const otherRemaining = other ? this.graceRemaining(other.playerId) : null;
+    return {
+      role: isHost ? 'host' : 'guest',
+      room: toSummary(room),
+      game: this.gameStateFor(room, playerId),
+      over: room.game?.result ?? null,
+      rematch: [...room.rematch],
+      opponentLeft: isHost ? room.departed : null,
+      opponentDisconnected: otherRemaining === null ? null : { remainingMs: otherRemaining },
+      requests: isHost && room.status === 'waiting' ? this.pendingRequests(room) : [],
+    };
   }
 
   private members(room: Room): Member[] {
@@ -447,25 +544,26 @@ export class RoomService implements OnModuleDestroy {
 
   private broadcastState(room: Room): void {
     for (const member of this.members(room)) {
-      const payload = this.gameStateFor(room, member.socketId);
-      if (payload) this.emit({ type: 'game-state', socketId: member.socketId, payload });
+      const payload = this.gameStateFor(room, member.playerId);
+      if (payload) this.emit({ type: 'game-state', playerId: member.playerId, payload });
     }
   }
 
   private broadcastOver(room: Room, payload: GameOverPayload): void {
     room.rematch.clear();
-    for (const member of this.members(room)) this.emit({ type: 'game-over', socketId: member.socketId, payload });
+    if (room.game) room.game.result = payload;
+    for (const member of this.members(room)) this.emit({ type: 'game-over', playerId: member.playerId, payload });
   }
 
   private broadcastRematch(room: Room): void {
     const requestedBy = [...room.rematch];
     for (const member of this.members(room)) {
-      this.emit({ type: 'rematch-status', socketId: member.socketId, requestedBy });
+      this.emit({ type: 'rematch-status', playerId: member.playerId, requestedBy });
     }
   }
 
   private notifyRequests(room: Room): void {
-    this.emit({ type: 'requests-changed', hostId: room.host.socketId, requests: this.pendingRequests(room) });
+    this.emit({ type: 'requests-changed', hostId: room.host.playerId, requests: this.pendingRequests(room) });
   }
 
   private emit(event: RoomEvent): void {
@@ -480,6 +578,7 @@ const newGame = (players: Record<Stone, Member>): Game => ({
   moveCount: 0,
   lastMove: null,
   over: false,
+  result: null,
 });
 
 export const toSummary = (room: Room): RoomSummary => ({

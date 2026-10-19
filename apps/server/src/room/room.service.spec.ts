@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Position, Stone } from '@gomoku/shared';
+import { RECONNECT_GRACE_MS, type Position, type Stone } from '@gomoku/shared';
 import { JOIN_REQUEST_TTL_MS, RoomEvent, RoomService } from './room.service';
 
 describe('RoomService', () => {
@@ -25,14 +25,14 @@ describe('RoomService', () => {
     return result.data.id;
   };
 
-  const requestJoin = (roomId: string, socketId: string, nickname: string) => {
-    const result = service.requestJoin(socketId, roomId, nickname);
+  const requestJoin = (roomId: string, playerId: string, nickname: string) => {
+    const result = service.requestJoin(playerId, roomId, nickname);
     if (!result.ok) throw new Error(result.error);
     return result.data.requestId;
   };
 
   const resolutions = () =>
-    events.flatMap((e) => (e.type === 'join-resolved' ? [[e.socketId, e.resolution]] : []));
+    events.flatMap((e) => (e.type === 'join-resolved' ? [[e.playerId, e.resolution]] : []));
 
   const lastRequestsForHost = () => {
     const changes = events.filter((e) => e.type === 'requests-changed');
@@ -91,11 +91,13 @@ describe('RoomService', () => {
       expect(service.close('nobody')).toEqual({ ok: false, error: 'not-in-room' });
     });
 
-    it('방장의 연결이 끊기면 방이 사라져요', () => {
+    it('방장의 연결이 끊기고 30초가 지나면 방이 사라져요', () => {
       openRoom();
       service.create('host-2', '도윤');
 
       service.disconnect('host-1');
+      expect(service.list()).toHaveLength(2);
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS);
 
       expect(service.list().map((r) => r.hostNickname)).toEqual(['도윤']);
       expect(service.findByMember('host-1')).toBeUndefined();
@@ -243,11 +245,12 @@ describe('RoomService', () => {
       ]);
     });
 
-    it('방장의 연결이 끊겨도 기다리던 참가자에게 방 닫힘을 알려요', () => {
+    it('방장의 연결이 끊기고 30초가 지나면 기다리던 참가자에게 방 닫힘을 알려요', () => {
       const roomId = openRoom();
       requestJoin(roomId, 'guest-1', '도윤');
 
       service.disconnect('host-1');
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS);
 
       expect(resolutions()).toEqual([['guest-1', 'room-closed']]);
     });
@@ -277,9 +280,9 @@ describe('RoomService', () => {
       if (!result.ok) throw new Error(`${i + 1}수 (${row},${col}): ${result.error}`);
     });
   };
-  const statesFor = (socketId: string) =>
-    events.flatMap((e) => (e.type === 'game-state' && e.socketId === socketId ? [e.payload] : []));
-  const overs = () => events.flatMap((e) => (e.type === 'game-over' ? [[e.socketId, e.payload] as const] : []));
+  const statesFor = (playerId: string) =>
+    events.flatMap((e) => (e.type === 'game-state' && e.playerId === playerId ? [e.payload] : []));
+  const overs = () => events.flatMap((e) => (e.type === 'game-over' ? [[e.playerId, e.payload] as const] : []));
 
   describe('대국', () => {
     it('수락하면 두 사람에게 첫 판 상태를 보내요. 방장이 흑이고 먼저 둬요', () => {
@@ -306,8 +309,8 @@ describe('RoomService', () => {
 
       play([7, 7]);
 
-      for (const socketId of ['host-1', 'guest-1']) {
-        const [state] = statesFor(socketId);
+      for (const playerId of ['host-1', 'guest-1']) {
+        const [state] = statesFor(playerId);
         expect(state.board[7][7]).toBe('black');
         expect(state).toMatchObject({ turn: 'white', moveCount: 1, lastMove: { row: 7, col: 7, stone: 'black' } });
       }
@@ -380,9 +383,9 @@ describe('RoomService', () => {
     play(...FIVE_IN_A_ROW);
     events = [];
   };
-  const leftNotices = () => events.flatMap((e) => (e.type === 'opponent-left' ? [[e.socketId, e.payload.reason]] : []));
+  const leftNotices = () => events.flatMap((e) => (e.type === 'opponent-left' ? [[e.playerId, e.payload.reason]] : []));
   const rematchStatuses = () =>
-    events.flatMap((e) => (e.type === 'rematch-status' ? [[e.socketId, e.requestedBy]] : []));
+    events.flatMap((e) => (e.type === 'rematch-status' ? [[e.playerId, e.requestedBy]] : []));
 
   describe('두는 중에 나가기', () => {
     it('참가자가 나가면 방장이 이기고, 방장은 방에 남아요', () => {
@@ -393,7 +396,7 @@ describe('RoomService', () => {
       expect(events).toEqual([
         {
           type: 'game-over',
-          socketId: 'host-1',
+          playerId: 'host-1',
           payload: { winner: 'black', reason: 'left', winningLine: null, moveCount: 0 },
         },
       ]);
@@ -401,18 +404,13 @@ describe('RoomService', () => {
       expect(service.findByMember('guest-1')).toBeUndefined();
     });
 
-    it('방장의 연결이 끊기면 참가자가 이기고 방이 사라져요', () => {
+    it('방장의 연결이 끊기고 30초 안에 돌아오지 않으면 참가자가 이기고 방이 사라져요', () => {
       startMatch();
 
       service.disconnect('host-1');
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS);
 
-      expect(events).toEqual([
-        {
-          type: 'game-over',
-          socketId: 'guest-1',
-          payload: { winner: 'white', reason: 'disconnect', winningLine: null, moveCount: 0 },
-        },
-      ]);
+      expect(overs()).toEqual([['guest-1', { winner: 'white', reason: 'disconnect', winningLine: null, moveCount: 0 }]]);
       expect(service.list()).toEqual([]);
       expect(service.findByMember('guest-1')).toBeUndefined();
     });
@@ -545,10 +543,11 @@ describe('RoomService', () => {
       expect(service.findByMember('guest-1')).toBeUndefined();
     });
 
-    it('연결이 끊기면 이유가 연결 끊김으로 가요', () => {
+    it('연결이 끊기고 30초가 지나면 이유가 연결 끊김으로 가요', () => {
       finishMatch();
 
       service.disconnect('guest-1');
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS);
 
       expect(leftNotices()).toEqual([['host-1', 'disconnect']]);
     });
@@ -588,6 +587,112 @@ describe('RoomService', () => {
       expect(service.reopen('host-1')).toEqual({ ok: false, error: 'opponent-present' });
       expect(service.reopen('guest-1')).toEqual({ ok: false, error: 'not-host' });
       expect(service.reopen('nobody')).toEqual({ ok: false, error: 'not-in-room' });
+    });
+  });
+
+  describe('연결 끊김과 재접속', () => {
+    const disconnectNotices = () =>
+      events.flatMap((e) => (e.type === 'opponent-disconnected' ? [[e.playerId, e.remainingMs]] : []));
+    const reconnectNotices = () => events.flatMap((e) => (e.type === 'opponent-reconnected' ? [e.playerId] : []));
+    const resumes = (playerId: string) =>
+      events.flatMap((e) => (e.type === 'resume' && e.playerId === playerId ? [e.payload] : []));
+
+    it('대국 중에 끊기면 상대에게 30초 기다린다고 알리고, 그 안에 돌아오면 이어서 둬요', () => {
+      startMatch();
+      play([7, 7]);
+      events = [];
+
+      service.disconnect('guest-1');
+      expect(disconnectNotices()).toEqual([['host-1', RECONNECT_GRACE_MS]]);
+
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS - 1000);
+      service.connect('guest-1');
+
+      expect(reconnectNotices()).toEqual(['host-1']);
+      const [resume] = resumes('guest-1');
+      expect(resume).toMatchObject({
+        role: 'guest',
+        room: { hostNickname: '지니', status: 'playing' },
+        game: { you: 'white', turn: 'white', moveCount: 1 },
+        over: null,
+        opponentDisconnected: null,
+      });
+
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS);
+      expect(overs()).toEqual([]);
+      expect(service.move('guest-1', { row: 7, col: 8 }).ok).toBe(true);
+    });
+
+    it('기다리는 동안 남은 사람이 다시 연결하면 남은 시간도 함께 받아요', () => {
+      startMatch();
+      service.disconnect('guest-1');
+      vi.advanceTimersByTime(12_000);
+
+      service.connect('host-1');
+
+      expect(resumes('host-1')[0].opponentDisconnected).toEqual({ remainingMs: RECONNECT_GRACE_MS - 12_000 });
+    });
+
+    it('연결이 끊긴 동안 두 번 끊김을 받아도 타이머는 하나예요', () => {
+      startMatch();
+      service.disconnect('guest-1');
+      vi.advanceTimersByTime(10_000);
+      service.disconnect('guest-1');
+
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS - 10_000);
+      expect(overs()).toHaveLength(1);
+    });
+
+    it('기다리던 상대를 두고 남은 사람이 나가면 남은 사람이 기권한 거예요', () => {
+      startMatch();
+      service.disconnect('guest-1');
+
+      service.leave('host-1');
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS);
+
+      expect(overs()).toEqual([['guest-1', { winner: 'white', reason: 'left', winningLine: null, moveCount: 0 }]]);
+    });
+
+    it('방장이 대기실에서 새로고침해도 방과 입장 요청이 그대로예요', () => {
+      const roomId = openRoom();
+      requestJoin(roomId, 'guest-1', '도윤');
+      events = [];
+
+      service.disconnect('host-1');
+      service.connect('host-1');
+      vi.advanceTimersByTime(RECONNECT_GRACE_MS);
+
+      expect(resolutions()).toEqual([]);
+      const [resume] = resumes('host-1');
+      expect(resume).toMatchObject({ role: 'host', room: { status: 'waiting' }, game: null });
+      expect(resume.requests.map((r) => r.nickname)).toEqual(['도윤']);
+    });
+
+    it('결과 화면에서 다시 연결하면 결과와 재대결 요청도 받아요', () => {
+      finishMatch();
+      service.requestRematch('guest-1');
+
+      service.connect('host-1');
+
+      expect(resumes('host-1')[0]).toMatchObject({
+        over: { winner: 'black', reason: 'five', moveCount: 9 },
+        rematch: ['white'],
+        opponentLeft: null,
+      });
+    });
+
+    it('참가자가 떠난 결과 화면에서 다시 연결한 방장은 재대결할 수 없다는 걸 받아요', () => {
+      finishMatch();
+      service.leave('guest-1');
+
+      service.connect('host-1');
+
+      expect(resumes('host-1')[0]).toMatchObject({ opponentLeft: 'left', rematch: [] });
+    });
+
+    it('방 밖에 있는 사람은 연결해도 받을 게 없어요', () => {
+      service.connect('someone');
+      expect(events).toEqual([]);
     });
   });
 });
