@@ -11,6 +11,7 @@ import type { Server, Socket } from 'socket.io';
 import { randomUUID } from 'crypto';
 import {
   Ack,
+  ClientErrorPayloadSchema,
   RECONNECT_GRACE_MS,
   ClientToServerEvents,
   GameMovePayloadSchema,
@@ -25,6 +26,7 @@ import {
 import { CLIENT_URL } from '../config';
 import { RoomEvent, RoomService } from './room.service';
 import { RateLimiter } from './rate-limiter';
+import { logError, logInfo, shortId } from '../logging/log';
 
 /** 소켓마다 붙여 두는 값. 연결 상태 복구 때도 함께 돌아와요. */
 type SocketData = { sessionId: string };
@@ -84,6 +86,7 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
       void client.join(sessionId);
     }
     this.sockets.set(sessionId, (this.sockets.get(sessionId) ?? 0) + 1);
+    logInfo('socket_connected', { session: shortId(sessionId), recovered: client.recovered, sessions: this.sockets.size });
     client.emit('session:assigned', { sessionId });
     this.rooms.connect(sessionId);
   }
@@ -98,6 +101,7 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     this.sockets.delete(sessionId);
     this.limiter.forget(sessionId);
+    logInfo('session_disconnected', { session: shortId(sessionId), sessions: this.sockets.size });
     this.rooms.disconnect(sessionId);
   }
 
@@ -114,7 +118,10 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!this.allow(client)) return LIMITED;
     const parsed = RoomCreatePayloadSchema.safeParse(payload);
     if (!parsed.success) return INVALID;
-    return this.rooms.create(client.data.sessionId, parsed.data.nickname);
+    const result = this.rooms.create(client.data.sessionId, parsed.data.nickname);
+    if (result.ok) logInfo('room_created', { room: shortId(result.data.id), rooms: this.rooms.list().length });
+    else if (result.error === 'too-many-rooms') logError('room_limit_reached');
+    return result;
   }
 
   @SubscribeMessage('room:close')
@@ -189,8 +196,21 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return this.rooms.requestRematch(client.data.sessionId);
   }
 
+  // ---- 진단 ----
+
+  /** 브라우저에서 난 오류를 로그로 남겨요. 답은 보내지 않아요. */
+  @SubscribeMessage('client:error')
+  handleClientError(@ConnectedSocket() client: GameSocket, @MessageBody() payload: unknown): void {
+    if (!this.allow(client)) return;
+    const parsed = ClientErrorPayloadSchema.safeParse(payload);
+    if (!parsed.success) return;
+    logError('client_error', { session: shortId(client.data.sessionId), ...parsed.data });
+  }
+
   private allow(client: GameSocket): boolean {
-    return this.limiter.take(client.data.sessionId);
+    const allowed = this.limiter.take(client.data.sessionId);
+    if (!allowed) logError('rate_limited', { session: shortId(client.data.sessionId) });
+    return allowed;
   }
 
   private dispatch(event: RoomEvent) {
@@ -206,6 +226,12 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect {
         break;
       case 'game-over':
         this.server.to(event.playerId).emit('game:over', event.payload);
+        logInfo('game_over', {
+          to: shortId(event.playerId),
+          reason: event.payload.reason,
+          winner: event.payload.winner,
+          moves: event.payload.moveCount,
+        });
         break;
       case 'rematch-status':
         this.server.to(event.playerId).emit('rematch:status', { requestedBy: event.requestedBy });
