@@ -19,6 +19,7 @@ import { GameMenu } from '../components/GameMenu';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ResultSheet, type OpponentGone } from '../components/ResultSheet';
 import { OpponentAwayDialog } from '../components/OpponentAwayDialog';
+import { RulesDialog } from '../components/RulesDialog';
 import './GameScreen.css';
 
 type Props = {
@@ -60,6 +61,7 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
   const awayLeft = useCountdown(opponentAway ?? 0);
   /** 07 대화상자에서 [계속 기다리기]를 눌렀어요. 상대가 다시 끊기면 새로 보여줘요. */
   const [awayDismissed, setAwayDismissed] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [preview, setPreview] = useState<Position | null>(null);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<RequestErrorCode | null>(null);
@@ -137,7 +139,13 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
         trailing={
           <>
             <span className="t-body num game__count">{game.moveCount}수</span>
-            {!over && <GameMenu onResign={() => openConfirm('resign')} onLeave={() => openConfirm('leave')} />}
+            {!over && (
+              <GameMenu
+                onResign={() => openConfirm('resign')}
+                onLeave={() => openConfirm('leave')}
+                onRules={() => setRulesOpen(true)}
+              />
+            )}
           </>
         }
       >
@@ -258,7 +266,33 @@ export const GameScreen = ({ status, game, over, isHost, rematch, opponentLeft, 
         </section>
       </main>
 
-      {away && !over && !awayDismissed && !confirming && (
+      {rulesOpen && (
+        <RulesDialog
+          onClose={() => setRulesOpen(false)}
+          liveStatus={
+            // 규칙을 보는 동안에도 실시간 상태를 숨기지 않아요 (ux-spec 11)
+            away ? (
+              <>
+                <span className="lampdot lampdot--off blink" aria-hidden="true" />
+                <span className="low">
+                  {opponentName} 님의 연결이 끊겼어요 {formatClock(awayLeft)}
+                </span>
+              </>
+            ) : myTurn ? (
+              <>
+                <span className="lampdot blink" aria-hidden="true" />
+                <span className="accent">내 차례예요</span>
+              </>
+            ) : over ? undefined : (
+              <>
+                <span className="lampdot lampdot--off" aria-hidden="true" />
+                <span className="muted">{opponentName} 님이 두고 있어요</span>
+              </>
+            )
+          }
+        />
+      )}
+      {away && !over && !awayDismissed && !confirming && !rulesOpen && (
         <OpponentAwayDialog
           opponentName={opponentName}
           myName={game.players[me].nickname}

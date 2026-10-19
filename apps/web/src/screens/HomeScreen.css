@@ -13,6 +13,13 @@
   color: var(--color-stamp);
 }
 
+/* 헤더의 [규칙]: 아이콘과 글자를 함께 보여줘서 버튼 너비가 넓어요 */
+.iconbtn.home__rules {
+  width: auto;
+  gap: 8px;
+  padding: 0 10px;
+}
+
 .home__banner-icon {
   flex: none;
   margin-top: 2px;

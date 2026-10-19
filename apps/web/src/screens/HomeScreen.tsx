@@ -7,6 +7,7 @@ import { errorMessage, type RequestErrorCode } from '../lib/errors';
 import { formatCreatedAt } from '../lib/format';
 import { Logo, Marquee } from '../components/Marquee';
 import { PixelIcon } from '../components/Pixel';
+import { RulesDialog } from '../components/RulesDialog';
 import './HomeScreen.css';
 
 type Props = {
@@ -26,6 +27,7 @@ export const HomeScreen = ({ status, nickname, onNicknameChange, onRoomCreated, 
   const hintId = useId();
   const [error, setError] = useState<RequestErrorCode | null>(null);
   const [creating, setCreating] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   /** 닉네임이 맞으면 앞뒤 공백을 지운 값을, 틀리면 입력칸에 알리고 null을 돌려줘요. */
@@ -52,9 +54,18 @@ export const HomeScreen = ({ status, nickname, onNicknameChange, onRoomCreated, 
 
   return (
     <div className="screen">
-      <Marquee status={status}>
+      <Marquee
+        status={status}
+        trailing={
+          <button className="iconbtn home__rules" type="button" onClick={() => setRulesOpen(true)}>
+            <PixelIcon name="book" size={20} />
+            <span className="t-body">규칙</span>
+          </button>
+        }
+      >
         <Logo />
       </Marquee>
+      {rulesOpen && <RulesDialog onClose={() => setRulesOpen(false)} />}
 
       {status === 'waking' && (
         <div className="banner" role="status">

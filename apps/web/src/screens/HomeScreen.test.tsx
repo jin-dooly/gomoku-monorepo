@@ -120,6 +120,15 @@ describe('HomeScreen', () => {
     expect(mockRequest).toHaveBeenCalledTimes(2);
   });
 
+  it('헤더의 규칙 버튼으로 규칙을 볼 수 있어요', async () => {
+    respond({ 'room:list': { ok: true, data: [] } });
+    const { user } = renderHome();
+
+    await user.click(screen.getByRole('button', { name: '규칙' }));
+
+    expect(screen.getByRole('dialog', { name: '규칙' })).toBeInTheDocument();
+  });
+
   describe('입장 요청', () => {
     it('닉네임이 없으면 요청하지 않고 입력칸으로 보내요', async () => {
       respond({ 'room:list': { ok: true, data: [room()] } });

@@ -5,6 +5,7 @@ import './GameMenu.css';
 type Props = {
   onResign: () => void;
   onLeave: () => void;
+  onRules: () => void;
 };
 
 /**
@@ -12,7 +13,7 @@ type Props = {
  * 같은 마크업을 화면 너비에 따라 아래에서 올라오는 시트 또는 버튼 아래 드롭다운으로 보여줘요.
  * 기권과 나가기는 되돌릴 수 없어서 바로 실행하지 않고 확인창으로 넘겨요.
  */
-export const GameMenu = ({ onResign, onLeave }: Props) => {
+export const GameMenu = ({ onResign, onLeave, onRules }: Props) => {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -41,8 +42,9 @@ export const GameMenu = ({ onResign, onLeave }: Props) => {
     items[nextIndex]?.focus();
   };
 
+  // 먼저 ⋮ 버튼으로 포커스를 돌려놓아야, 이어서 뜨는 확인창·규칙 창이 닫힐 때 그 자리로 돌아와요.
   const choose = (action: () => void) => {
-    close(false);
+    close();
     action();
   };
 
@@ -81,13 +83,9 @@ export const GameMenu = ({ onResign, onLeave }: Props) => {
               </span>
             </button>
             <div className="gmenu__divider" role="separator" />
-            {/* 규칙 보기 화면은 아직 기획되지 않았어요 (ux-spec 8장) */}
-            <button className="gmenu__item gmenu__item--short" type="button" role="menuitem" disabled>
+            <button className="gmenu__item gmenu__item--short" type="button" role="menuitem" onClick={() => choose(onRules)}>
               <PixelIcon name="book" size={28} />
-              <span className="gmenu__text">
-                <span className="t-title">규칙 보기</span>
-                <span className="t-body muted">준비 중이에요</span>
-              </span>
+              <span className="t-title">규칙 보기</span>
             </button>
             <button className="btn btn--ghost btn--wide gmenu__close" type="button" onClick={() => close()}>
               닫기

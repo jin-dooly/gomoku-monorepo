@@ -297,6 +297,36 @@ describe('GameScreen', () => {
       expect(onLeft).toHaveBeenCalled();
     });
 
+    it('메뉴에서 규칙 보기를 열면 지금 내 차례인지도 함께 보여주고, 닫으면 ⋮로 돌아가요', async () => {
+      const { user } = renderGame(state({ moveCount: 4 }));
+
+      await user.click(screen.getByRole('button', { name: '대국 메뉴' }));
+      await user.click(screen.getByRole('menuitem', { name: '규칙 보기' }));
+
+      const rules = screen.getByRole('dialog', { name: '규칙' });
+      expect(within(rules).getByRole('status')).toHaveTextContent('내 차례예요');
+
+      await user.click(within(rules).getByRole('button', { name: '닫기' }));
+      expect(screen.queryByRole('dialog', { name: '규칙' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '대국 메뉴' })).toHaveFocus();
+    });
+
+    it('규칙을 보는 동안 상대 연결이 끊기면 07 대화상자 대신 규칙 위에 알려줘요', async () => {
+      const { user, rerenderWith } = renderGame(state({ moveCount: 4 }));
+      await user.click(screen.getByRole('button', { name: '대국 메뉴' }));
+      await user.click(screen.getByRole('menuitem', { name: '규칙 보기' }));
+
+      rerenderWith({ opponentAway: Date.now() + 25_000 });
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      expect(within(screen.getByRole('dialog', { name: '규칙' })).getByRole('status')).toHaveTextContent(
+        /도윤 님의 연결이 끊겼어요 0:2\d/,
+      );
+
+      await user.click(screen.getByRole('button', { name: '닫기' }));
+      expect(screen.getByRole('alertdialog', { name: '도윤 님의 연결이 끊겼어요' })).toBeInTheDocument();
+    });
+
     it('메뉴는 Esc로 닫히고 ⋮ 버튼으로 포커스가 돌아가요', async () => {
       const { user } = renderGame(state({ moveCount: 4 }));
 
