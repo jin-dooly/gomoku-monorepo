@@ -232,4 +232,12 @@ describe('RoomGateway (소켓 통합)', () => {
       expect(await reloaded.emitWithAck('game:move', { row: 7, col: 8 })).toEqual({ ok: true, data: undefined });
     });
   });
+
+  it('한 세션이 짧은 시간에 요청을 퍼부으면 한도부터는 거절해요', async () => {
+    const client = await connect();
+    const results = await Promise.all(Array.from({ length: 31 }, () => client.emitWithAck('room:list')));
+
+    expect(results.filter((r) => r.ok)).toHaveLength(30);
+    expect(results.at(-1)).toEqual({ ok: false, error: 'rate-limited' });
+  });
 });

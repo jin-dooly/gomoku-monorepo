@@ -31,6 +31,10 @@ import {
 /** 입장 요청은 60초 안에 방장이 답하지 않으면 자동으로 취소돼요. */
 export const JOIN_REQUEST_TTL_MS = 60_000;
 
+/** 무료 서버 한 대가 감당할 만큼만 받아요. 넘으면 새 방·요청을 잠시 막아요. */
+export const MAX_ROOMS = 200;
+export const MAX_PENDING_REQUESTS_PER_ROOM = 10;
+
 export type Member = { playerId: string; nickname: string };
 
 type JoinRequest = {
@@ -120,6 +124,7 @@ export class RoomService implements OnModuleDestroy {
 
   create(playerId: string, nickname: string): Ack<RoomSummary> {
     if (this.isBusy(playerId)) return fail('already-in-room');
+    if (this.rooms.size >= MAX_ROOMS) return fail('too-many-rooms');
 
     const room: Room = {
       id: randomUUID(),
@@ -341,6 +346,7 @@ export class RoomService implements OnModuleDestroy {
     const room = this.rooms.get(roomId);
     if (!room) return fail('room-not-found');
     if (room.status !== 'waiting') return fail('room-not-waiting');
+    if (room.requests.size >= MAX_PENDING_REQUESTS_PER_ROOM) return fail('too-many-requests');
 
     const id = randomUUID();
     const request: JoinRequest = {
