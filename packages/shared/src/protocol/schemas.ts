@@ -5,7 +5,13 @@ import { BOARD_SIZE } from '../game/rules';
 export const NICKNAME_MIN = 2;
 export const NICKNAME_MAX = 10;
 
-export const NicknameSchema = z.string().trim().min(NICKNAME_MIN).max(NICKNAME_MAX);
+/**
+ * 보이지 않는 문자는 받지 않아요: 제어 문자, 폭 없는 문자·방향 바꾸기 같은 서식 문자(\p{C}),
+ * 줄·문단 구분자. 다른 사람 화면에서 이름이 깨지거나 남의 이름처럼 보이게 꾸미는 걸 막아요.
+ */
+const VISIBLE_ONLY = /^[^\p{C}\p{Zl}\p{Zp}]+$/u;
+
+export const NicknameSchema = z.string().trim().min(NICKNAME_MIN).max(NICKNAME_MAX).regex(VISIBLE_ONLY);
 
 export const PositionSchema = z.object({
   row: z.number().int().min(0).max(BOARD_SIZE - 1),
@@ -27,7 +33,18 @@ export const JoinDecisionPayloadSchema = z.object({ requestId: IdSchema });
 
 export const GameMovePayloadSchema = PositionSchema;
 
+/** 브라우저에서 난 오류를 서버 로그로 보내요(외부 서비스 없이). 길이를 잘라서 받아요. */
+export const ClientErrorPayloadSchema = z.object({
+  kind: z.enum(['error', 'unhandledrejection', 'render']),
+  message: z.string().max(500),
+  stack: z.string().max(4000).optional(),
+  /** 화면 이름이나 경로 */
+  where: z.string().max(200).optional(),
+  userAgent: z.string().max(300).optional(),
+});
+
 export type RoomCreatePayload = z.infer<typeof RoomCreatePayloadSchema>;
 export type JoinRequestPayload = z.infer<typeof JoinRequestPayloadSchema>;
 export type JoinDecisionPayload = z.infer<typeof JoinDecisionPayloadSchema>;
 export type GameMovePayload = z.infer<typeof GameMovePayloadSchema>;
+export type ClientErrorPayload = z.infer<typeof ClientErrorPayloadSchema>;

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { RECONNECT_GRACE_MS } from '@gomoku/shared';
 import { formatClock } from '../hooks/useCountdown';
+import { trapTab } from '../lib/focusTrap';
 import { Meter } from './Meter';
 import './ConfirmDialog.css';
 
@@ -22,7 +23,12 @@ export const OpponentAwayDialog = ({ opponentName, myName, remainingMs, onLeave,
   const descId = useId();
   const waitRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => waitRef.current?.focus(), []);
+  // 열릴 때 [계속 기다리기]로, 닫히면 원래 있던 곳으로 포커스를 돌려요.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    waitRef.current?.focus();
+    return () => opener?.focus?.();
+  }, []);
 
   return (
     <div
@@ -32,6 +38,7 @@ export const OpponentAwayDialog = ({ opponentName, myName, remainingMs, onLeave,
           e.preventDefault();
           onWait();
         }
+        trapTab(e);
       }}
     >
       <div className="confirm" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descId}>

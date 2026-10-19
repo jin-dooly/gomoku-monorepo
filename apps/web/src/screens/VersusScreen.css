@@ -5,6 +5,8 @@
   display: grid;
   /* 아래(흑)는 내용만큼, 위(백)는 남는 공간을 채워요 */
   grid-template-rows: minmax(0, 1fr) 88px auto;
+  /* VS 글자가 커졌다 줄어드는 동안 화면 밖으로 넘치지 않게 해요 */
+  overflow: hidden;
 }
 
 .versus__side {

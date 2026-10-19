@@ -71,6 +71,18 @@ describe('GameScreen', () => {
     expect(mockRequest).toHaveBeenCalledWith('game:move', { row: 8, col: 6 });
   });
 
+  it('차례가 넘어오면 화면 낭독기가 상대의 마지막 수를 함께 읽어요', () => {
+    renderGame(
+      state({
+        board: withStones([[7, 7, 'white']]),
+        moveCount: 2,
+        lastMove: { row: 7, col: 7, stone: 'white' },
+      }),
+    );
+
+    expect(screen.getByText('내 차례예요 · 마지막 수 · 도윤 H8')).toHaveClass('sr-only');
+  });
+
   it('다른 곳을 누르면 미리보기가 옮겨지고, 취소하면 지워져요', async () => {
     const { user } = renderGame(state());
 

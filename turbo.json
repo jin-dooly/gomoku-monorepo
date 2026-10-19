@@ -14,7 +14,8 @@
         "dist/**"
       ],
       "env": [
-        "VITE_SOCKET_URL"
+        "VITE_SOCKET_URL",
+        "VITE_SITE_URL"
       ]
     },
     "dev": {
@@ -33,7 +34,7 @@
     },
     "type-check": {
       "dependsOn": [
-        "^type-check"
+        "^build"
       ]
     }
   }

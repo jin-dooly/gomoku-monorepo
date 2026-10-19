@@ -60,7 +60,7 @@ describe('HomeScreen', () => {
     await user.type(screen.getByLabelText('닉네임'), '지');
     await user.click(screen.getByRole('button', { name: '방 만들기' }));
 
-    expect(screen.getByText('닉네임은 2–10자로 입력해 주세요.')).toBeInTheDocument();
+    expect(screen.getByText('닉네임은 보이는 글자 2–10자로 입력해 주세요.')).toBeInTheDocument();
     expect(screen.getByLabelText('닉네임')).toHaveAttribute('aria-invalid', 'true');
     expect(mockRequest).not.toHaveBeenCalledWith('room:create', expect.anything());
   });
@@ -137,7 +137,7 @@ describe('HomeScreen', () => {
       await user.click(await screen.findByRole('button', { name: '도윤 방에 입장 요청' }));
 
       expect(screen.getByLabelText('닉네임')).toHaveFocus();
-      expect(screen.getByText('닉네임은 2–10자로 입력해 주세요.')).toBeInTheDocument();
+      expect(screen.getByText('닉네임은 보이는 글자 2–10자로 입력해 주세요.')).toBeInTheDocument();
       expect(mockRequest).not.toHaveBeenCalledWith('join:request', expect.anything());
     });
 

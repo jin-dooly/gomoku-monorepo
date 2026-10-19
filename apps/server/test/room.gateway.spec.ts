@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { Test } from '@nestjs/testing';
 import { io, Socket } from 'socket.io-client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientToServerEvents, ServerToClientEvents } from '@gomoku/shared';
 import { RoomGateway } from '../src/room/room.gateway';
 import { RoomService } from '../src/room/room.service';
@@ -18,7 +18,13 @@ describe('RoomGateway (소켓 통합)', () => {
   let url: string;
   const clients: Client[] = [];
 
+  let logs: string[] = [];
+
   beforeEach(async () => {
+    // 서버의 JSON 로그는 테스트 출력에 섞지 않고 모아서 확인해요.
+    logs = [];
+    vi.spyOn(console, 'log').mockImplementation((line: string) => void logs.push(line));
+    vi.spyOn(console, 'error').mockImplementation((line: string) => void logs.push(line));
     const moduleRef = await Test.createTestingModule({ providers: [RoomGateway, RoomService] }).compile();
     app = moduleRef.createNestApplication();
     app.useWebSocketAdapter(new IoAdapter(app));
@@ -30,6 +36,7 @@ describe('RoomGateway (소켓 통합)', () => {
   afterEach(async () => {
     clients.splice(0).forEach((c) => c.disconnect());
     await app.close();
+    vi.restoreAllMocks();
   });
 
   /** 연결하고 서버가 준 세션 ID까지 받아요. sessionId를 주면 그 세션으로 다시 연결해요(새로고침 흉내). */
@@ -231,5 +238,26 @@ describe('RoomGateway (소켓 통합)', () => {
       expect(resume).toMatchObject({ role: 'guest', game: { you: 'white', turn: 'white', moveCount: 1 }, over: null });
       expect(await reloaded.emitWithAck('game:move', { row: 7, col: 8 })).toEqual({ ok: true, data: undefined });
     });
+  });
+
+  it('한 세션이 짧은 시간에 요청을 퍼부으면 한도부터는 거절해요', async () => {
+    const client = await connect();
+    const results = await Promise.all(Array.from({ length: 31 }, () => client.emitWithAck('room:list')));
+
+    expect(results.filter((r) => r.ok)).toHaveLength(30);
+    expect(results.at(-1)).toEqual({ ok: false, error: 'rate-limited' });
+  });
+
+  it('브라우저 오류를 받으면 한 줄 JSON 로그로 남기고, 모양이 틀리면 버려요', async () => {
+    const client = await connect();
+
+    client.emit('client:error', { kind: 'render', message: 'Cannot read x', where: 'game' });
+    client.emit('client:error', { kind: 'nope', message: 'ignored' } as never);
+    await client.emitWithAck('room:list'); // 앞의 이벤트가 처리될 때까지 기다려요
+
+    const errors = logs.map((l) => JSON.parse(l)).filter((l) => l.event === 'client_error');
+    expect(errors).toEqual([
+      expect.objectContaining({ level: 'error', kind: 'render', message: 'Cannot read x', where: 'game', session: expect.any(String) }),
+    ]);
   });
 });

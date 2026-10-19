@@ -16,6 +16,13 @@ describe('RulesDialog', () => {
     expect(within(dialog).getByRole('img', { name: '대각선 6목 예시' })).toBeInTheDocument();
   });
 
+  it('맨 아래에 폰트 라이선스와 닉네임 안내를 보여줘요', () => {
+    render(<RulesDialog onClose={vi.fn()} />);
+
+    expect(screen.getByRole('link', { name: 'SIL OFL' })).toHaveAttribute('href', '/licenses/galmuri-OFL.txt');
+    expect(screen.getByText(/닉네임은 저장하지 않아요/)).toBeInTheDocument();
+  });
+
   it('처음 포커스는 닫기에 있고, 닫기·Esc·바깥을 누르면 닫혀요', async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();

@@ -1,5 +1,6 @@
 import type { Board, Position, Stone, WinningLine } from '../game/rules';
 import type {
+  ClientErrorPayload,
   GameMovePayload,
   JoinDecisionPayload,
   JoinRequestPayload,
@@ -30,7 +31,13 @@ export type ErrorCode =
   /** 상대가 방을 나가서 재대결할 수 없어요 */
   | 'no-opponent'
   /** 상대가 아직 방에 있어서 대기실로 돌아갈 수 없어요 */
-  | 'opponent-present';
+  | 'opponent-present'
+  /** 짧은 시간에 요청을 너무 많이 보냈어요 */
+  | 'rate-limited'
+  /** 서버에 열린 방이 너무 많아요 */
+  | 'too-many-rooms'
+  /** 이 방에 기다리는 입장 요청이 너무 많아요 */
+  | 'too-many-requests';
 
 export type Ack<T = void> = { ok: true; data: T } | { ok: false; error: ErrorCode };
 export type AckCallback<T = void> = (result: Ack<T>) => void;
@@ -156,6 +163,9 @@ export interface ClientToServerEvents {
   'game:resign': (ack: AckCallback) => void;
 
   'rematch:request': (ack: AckCallback) => void;
+
+  /** 브라우저 오류 보고. 답은 없어요. */
+  'client:error': (payload: ClientErrorPayload) => void;
 }
 
 export interface ServerToClientEvents {

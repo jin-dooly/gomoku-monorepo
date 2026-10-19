@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RECONNECT_GRACE_MS, type Position, type Stone } from '@gomoku/shared';
-import { JOIN_REQUEST_TTL_MS, RoomEvent, RoomService } from './room.service';
+import { JOIN_REQUEST_TTL_MS, MAX_PENDING_REQUESTS_PER_ROOM, MAX_ROOMS, RoomEvent, RoomService } from './room.service';
 
 describe('RoomService', () => {
   let service: RoomService;
@@ -693,6 +693,21 @@ describe('RoomService', () => {
     it('방 밖에 있는 사람은 연결해도 받을 게 없어요', () => {
       service.connect('someone');
       expect(events).toEqual([]);
+    });
+  });
+
+  describe('남용 방지 한도', () => {
+    it('열린 방이 한도에 닿으면 새 방을 만들 수 없어요', () => {
+      for (let i = 0; i < MAX_ROOMS; i++) service.create(`h-${i}`, '방장');
+
+      expect(service.create('one-more', '지니')).toEqual({ ok: false, error: 'too-many-rooms' });
+    });
+
+    it('한 방에 기다리는 요청이 한도에 닿으면 더 받지 않아요', () => {
+      const roomId = openRoom();
+      for (let i = 0; i < MAX_PENDING_REQUESTS_PER_ROOM; i++) requestJoin(roomId, `g-${i}`, '도전자');
+
+      expect(service.requestJoin('late', roomId, '하람')).toEqual({ ok: false, error: 'too-many-requests' });
     });
   });
 });
