@@ -1,0 +1,35 @@
+.failed {
+  flex: 1;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 56px var(--gutter) 24px;
+}
+
+.failed__ticket {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px var(--gutter) 24px;
+}
+
+.failed__host {
+  opacity: 0.6;
+}
+
+.failed__stamp {
+  position: absolute;
+  right: var(--gutter);
+  top: 34px;
+}
+
+.failed__actions {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}

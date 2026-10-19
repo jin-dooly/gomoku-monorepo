@@ -1,0 +1,40 @@
+.confirm__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gutter);
+  background: rgba(12, 11, 28, 0.74);
+}
+
+.confirm {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 20px 20px;
+  background: var(--color-panel);
+  box-shadow:
+    inset 0 0 0 4px var(--color-raise),
+    0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.confirm__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.confirm__go {
+  flex: 1;
+}
+
+/* 07 연결 끊김: 남은 시간 */
+.away__clock {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}

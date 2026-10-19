@@ -1,0 +1,243 @@
+/* 모바일: 아래에서 올라오는 키 큰 시트, 내용은 스크롤 (ux-spec 11) */
+.rules__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(12, 11, 28, 0.74);
+}
+
+.rules {
+  width: 100%;
+  max-height: calc(100dvh - 64px);
+  display: flex;
+  flex-direction: column;
+  padding: 12px var(--gutter) 16px;
+  background: var(--color-panel);
+  box-shadow: inset 0 4px 0 var(--color-raise);
+}
+
+.rules__grip {
+  flex: none;
+  width: 48px;
+  height: 4px;
+  margin: 0 auto 12px;
+  background: var(--color-raise);
+}
+
+.rules__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.rules__head h2 {
+  flex: 1;
+}
+
+.rules__live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--color-ink);
+}
+
+.rules__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.rules__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 0;
+  box-shadow: inset 0 -4px 0 var(--color-ink);
+}
+
+.rules__item:last-child {
+  box-shadow: none;
+}
+
+.rules__text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rules__examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 10px 6px 4px;
+}
+
+.rules__foot {
+  flex: none;
+  padding-top: 12px;
+}
+
+.rules__close {
+  width: 100%;
+}
+
+/* 7×7 예시판 */
+.mini {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.mini__board {
+  --mini-cell: 20px;
+  display: grid;
+  grid-template-columns: repeat(7, var(--mini-cell));
+  grid-template-rows: repeat(7, var(--mini-cell));
+  background: var(--color-wood);
+  box-shadow:
+    0 0 0 4px var(--color-wood-frame),
+    0 0 0 6px var(--color-deep);
+}
+
+.mini__cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mini__cell::before,
+.mini__cell::after {
+  content: '';
+  position: absolute;
+  background: var(--color-wood-line);
+}
+
+.mini__cell::before {
+  left: 0;
+  right: 0;
+  top: calc(50% - 1px);
+  height: 2px;
+}
+
+.mini__cell::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+}
+
+.mini__stone {
+  position: relative;
+  z-index: 1;
+  width: 80%;
+  height: 80%;
+  display: flex;
+}
+
+.mini__stone--win {
+  box-shadow:
+    0 0 0 2px var(--color-lamp),
+    0 0 0 3px var(--color-ink);
+}
+
+.mini__sprite {
+  width: 100%;
+  height: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rules {
+    animation: rules-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes rules-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* PC: 판 위 가운데 대화상자, 규칙은 두 칸 격자 */
+@media (min-width: 1024px) {
+  .rules__scrim {
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .rules {
+    width: 820px;
+    max-height: calc(100dvh - 48px);
+    padding: 28px;
+    gap: 16px;
+    box-shadow:
+      inset 0 0 0 4px var(--color-raise),
+      0 16px 40px rgba(0, 0, 0, 0.45);
+    animation: none;
+  }
+
+  .rules__grip {
+    display: none;
+  }
+
+  .rules__head {
+    padding-bottom: 0;
+  }
+
+  .rules__body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .rules__item,
+  .rules__item:last-child {
+    padding: 16px;
+    background: var(--color-panel-dim);
+    box-shadow: none;
+  }
+
+  .rules__item--wide {
+    grid-column: 1 / -1;
+  }
+
+  .rules__item--wide:has(.rules__examples) {
+    flex-direction: row;
+    align-items: center;
+    gap: 28px;
+  }
+
+  .rules__item--wide .rules__text {
+    flex: 1;
+  }
+
+  .rules__examples {
+    flex-wrap: nowrap;
+    gap: 28px;
+    padding: 6px;
+  }
+
+  .mini__board {
+    --mini-cell: 24px;
+  }
+
+  .rules__foot {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0;
+  }
+
+  .rules__close {
+    width: auto;
+  }
+}

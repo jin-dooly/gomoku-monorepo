@@ -1,0 +1,128 @@
+.home {
+  flex: 1;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 24px var(--gutter) 40px;
+}
+
+.home__notice {
+  color: var(--color-stamp);
+}
+
+/* 헤더의 [규칙]: 아이콘과 글자를 함께 보여줘서 버튼 너비가 넓어요 */
+.iconbtn.home__rules {
+  width: auto;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.home__banner-icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.home__create {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.home__rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.home__rooms-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.home__rooms-head h2 {
+  flex: 1;
+}
+
+.home__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px var(--gutter);
+  text-align: center;
+}
+
+.room {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px 12px 12px 16px;
+  background: var(--color-panel);
+}
+
+.room--busy {
+  background: var(--color-panel-dim);
+}
+
+.room--busy .room__host {
+  color: var(--color-muted);
+}
+
+.room__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.room__host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* PC: 왼쪽에 방 만들기, 오른쪽에 방 목록 */
+@media (min-width: 1024px) {
+  .home {
+    display: grid;
+    grid-template-columns: 420px minmax(0, 1fr);
+    align-items: start;
+    gap: 64px;
+    padding: 40px 64px;
+  }
+
+  .home__notice {
+    grid-column: 1 / -1;
+  }
+
+  .room {
+    min-height: 80px;
+    padding: 12px 16px 12px 24px;
+    gap: 24px;
+  }
+
+  .room__info {
+    flex-direction: row;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .room__host {
+    flex: 0 0 200px;
+  }
+}

@@ -1,2 +1,3 @@
-export * from './types';
-export * from './schemas';
+export * from './game/rules';
+export * from './protocol/schemas';
+export * from './protocol/events';

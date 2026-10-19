@@ -49,11 +49,28 @@ pnpm --filter @gomoku/server dev
 pnpm build
 ```
 
+### 테스트
+
+```bash
+pnpm test                               # shared · server · web 전부 (Vitest)
+pnpm --filter @gomoku/web test:watch    # 패키지 하나만, 바뀔 때마다
+```
+
+- shared: 오목 규칙과 데이터 검사
+- server: 방·입장 요청·대국·재접속 서비스 테스트 + 실제 소켓으로 두 사람이 접속하는 통합 테스트
+- web: Testing Library 화면 테스트 (서버 요청과 소켓은 가짜로 바꿔 끼워요)
+
 ### Lint
 
 ```bash
 pnpm lint
 ```
+
+### 기획과 디자인
+
+- 기획: [`docs/ux-spec.md`](docs/ux-spec.md)
+- 디자인 시스템: [`apps/web/DESIGN.md`](apps/web/DESIGN.md)
+- 폰트를 다시 자르려면: [`apps/web/scripts/subset-fonts.py`](apps/web/scripts/subset-fonts.py) (화면 문구에 새 글자가 생기면 테스트가 알려줘요)
 
 ## 패키지
 

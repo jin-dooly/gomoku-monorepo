@@ -1,0 +1,116 @@
+/* 모바일: 판 위를 어둡게 덮고 아래에서 올라오는 시트 (ux-spec 08) */
+.gmenu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(12, 11, 28, 0.74);
+}
+
+.gmenu {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  padding: 12px var(--gutter) 24px;
+  background: var(--color-panel);
+  box-shadow: inset 0 4px 0 var(--color-raise);
+}
+
+.gmenu__grip {
+  width: 48px;
+  height: 4px;
+  margin: 0 auto 12px;
+  background: var(--color-raise);
+}
+
+.gmenu__item {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 8px;
+  background: transparent;
+  color: var(--color-paper);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gmenu__item:hover:not(:disabled),
+.gmenu__item:focus-visible {
+  background: var(--color-raise);
+}
+
+.gmenu__item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-lamp);
+}
+
+.gmenu__item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.gmenu__item--short {
+  min-height: 56px;
+}
+
+.gmenu__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gmenu__divider {
+  height: 4px;
+  margin: 8px 0;
+  background: var(--color-ink);
+}
+
+.gmenu__close {
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gmenu {
+    animation: sheet-up 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* PC: ⋮ 버튼 바로 아래 오른쪽 정렬 드롭다운 (ux-spec 10) */
+@media (min-width: 1024px) {
+  .gmenu__scrim {
+    background: transparent;
+  }
+
+  .gmenu {
+    left: auto;
+    right: 24px;
+    bottom: auto;
+    top: calc(var(--marquee-height) + 4px);
+    width: 380px;
+    padding: 12px;
+    box-shadow:
+      inset 0 0 0 4px var(--color-raise),
+      0 16px 40px rgba(0, 0, 0, 0.5);
+    animation: none;
+  }
+
+  /* 공통 .btn 스타일보다 늦게 적용되도록 한 단계 구체적으로 써요 */
+  .gmenu .gmenu__grip,
+  .gmenu .gmenu__close {
+    display: none;
+  }
+}

@@ -15,7 +15,7 @@ Both audiences matter equally: a reviewer should experience exactly what a frien
 
 ## Product Purpose
 
-A two-player, real-time online Gomoku game in the browser. No install and, for now, no account: you enter a nickname, then create or join a room. Success means two people can get from opening the site to placing their first stone in seconds, play without lag or ambiguity about whose turn it is, and rematch without friction.
+A two-player, real-time online Gomoku game in the browser. No install and no account: you enter a nickname, then create or join a room. Success means two people can get from opening the site to placing their first stone in seconds, play without lag or ambiguity about whose turn it is, and rematch without friction.
 
 ## Positioning
 
@@ -40,12 +40,13 @@ A small, focused, well-crafted real-time game rather than a feature-heavy game p
 - Stack: pnpm + Turborepo monorepo. React 18 + TypeScript + Vite (web), NestJS + Socket.IO (server), and a shared Zod/types package (`@gomoku/shared`). The web app deploys to Vercel and the server to Render.
 - Current server state: one global game in `GameService`. The multi-room flow above still needs server work (rooms, request/accept/reject/cancel events, timers).
 - Language: **Korean only**. No i18n planned.
-- Planned: **accounts / login** for persistent identity (design not yet decided).
+- Out of scope: accounts and login (identity is a per-tab session ID only).
 - Out of scope for now: rankings and match history, AI opponent, spectating, in-room chat.
 
 ## Brand Commitments
 
 - Product name in use: "오목 게임" (page title "Gomoku Game"). No logo or other brand assets exist yet.
+- Visual world: pixel-art "2P arcade versus" (black/white faction panels, a cyan turn lamp, yellow reserved for pressable controls), set in the Galmuri pixel font. Values live in `docs/ux-spec.md` §5; the mockup is https://claude.ai/artifact/BTsJtEEcTz7gAi2ADuFwDD
 
 ## Evidence on Hand
 

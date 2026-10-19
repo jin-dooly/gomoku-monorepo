@@ -1,0 +1,173 @@
+/*
+ * 모바일: 위에서부터 상대 카드, 판, 내 카드, 조작부.
+ * PC: 왼쪽에 큰 판, 오른쪽에 상대 카드 · VS · 내 카드 · 조작부를 세로로 쌓아요 (ux-spec 10 PC 대국 레이아웃).
+ */
+.game__count {
+  padding-right: 4px;
+}
+
+.game__layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.game__board {
+  /* 390px 화면에서 345px. 키 작은 화면에서는 카드와 조작부가 보이도록 줄여요. */
+  width: min(345px, calc(100vw - 45px), calc(100dvh - 400px));
+  min-width: 240px;
+  margin: 24px auto;
+}
+
+.game__vs {
+  display: none;
+}
+
+.game__dock {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px var(--gutter) 24px;
+  background: var(--color-panel);
+  box-shadow: inset 0 4px 0 var(--color-raise);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mk-last {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--color-ember);
+}
+
+.mk-pick {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  outline: 2px dashed var(--color-lamp);
+  outline-offset: -2px;
+}
+
+.game__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.game__place {
+  flex: 1;
+}
+
+.game__waiting,
+.game__last {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.game__result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stamp--muted {
+  box-shadow: inset 0 0 0 4px var(--color-muted);
+  color: var(--color-muted);
+}
+.side--paper .stamp--muted {
+  box-shadow: inset 0 0 0 4px var(--color-paper-muted);
+  color: var(--color-paper-muted);
+}
+
+/*
+ * 모바일에서 판이 끝나면 결과 시트가 들어갈 자리를 만들어요.
+ * 판 위아래 여백, 진영 패널 높이, 결과 제목(33px = Galmuri11 × 3)을 조금씩 줄여 한 화면에 담아요.
+ */
+@media (max-width: 1023px) {
+  .game__layout--over .game__board {
+    margin: 16px auto;
+  }
+
+  .game__layout--over .side {
+    min-height: 60px;
+  }
+
+  .game__dock--result {
+    gap: 10px;
+    padding-top: 12px;
+    padding-bottom: 16px;
+  }
+
+  .game__dock--result .result {
+    gap: 10px;
+  }
+
+  .game__dock--result .result h2 {
+    font-size: 33px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .game__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 440px;
+    grid-template-rows: 1fr auto auto auto auto 1fr;
+    grid-template-areas:
+      'board .'
+      'board opponent'
+      'board vs'
+      'board me'
+      'board dock'
+      'board .';
+    column-gap: 48px;
+    row-gap: 12px;
+    padding: 40px 48px 40px 64px;
+    max-width: 1440px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .game__opponent {
+    grid-area: opponent;
+    min-height: 96px;
+  }
+
+  .game__me {
+    grid-area: me;
+    min-height: 96px;
+  }
+
+  .game__vs {
+    display: block;
+    grid-area: vs;
+    text-align: center;
+    color: var(--color-muted);
+  }
+
+  .game__board {
+    grid-area: board;
+    align-self: center;
+    justify-self: center;
+    width: min(720px, calc(100dvh - 56px - 100px), calc(100vw - 440px - 48px - 112px - 20px));
+    margin: 0;
+  }
+
+  .game__dock {
+    grid-area: dock;
+    margin-top: 24px;
+    padding: 20px;
+    box-shadow: none;
+  }
+}

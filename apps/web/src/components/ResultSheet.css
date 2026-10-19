@@ -1,0 +1,48 @@
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.result__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--color-ink);
+}
+
+.result__actions {
+  display: flex;
+  /* 한 줄에 다 안 들어가면(예: [대기실로 돌아가기]) 두 줄로 나뉘고, 주 버튼(노랑)이 위로 와요. */
+  flex-wrap: wrap-reverse;
+  gap: 8px;
+}
+
+.result__actions .btn {
+  flex: 1 1 auto;
+}
+
+.result__main {
+  flex-grow: 2;
+}
+
+/* 아래에서 올라와요 */
+@media (prefers-reduced-motion: no-preference) {
+  .result {
+    animation: result-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes result-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}

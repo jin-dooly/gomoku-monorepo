@@ -1,0 +1,114 @@
+.versus {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  /* 아래(흑)는 내용만큼, 위(백)는 남는 공간을 채워요 */
+  grid-template-rows: minmax(0, 1fr) 88px auto;
+}
+
+.versus__side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 40px 24px;
+}
+
+.versus__side--white {
+  justify-content: flex-end;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.versus__side--black {
+  justify-content: flex-start;
+  min-height: 40vh;
+  background: var(--color-deep);
+  color: var(--color-paper);
+  padding-bottom: 24px;
+}
+
+.versus__role {
+  color: var(--color-paper-muted);
+}
+
+.versus__badge {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.versus__tag {
+  font-size: 22px;
+  padding: 8px 14px;
+}
+
+.versus__tag--white {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+.versus__vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-ink);
+  box-shadow:
+    inset 0 4px 0 var(--color-lamp),
+    inset 0 -4px 0 var(--color-lamp);
+  color: var(--color-lamp);
+  font-family: var(--font-11);
+  font-weight: 700;
+  font-size: 66px;
+  line-height: 1;
+}
+
+.versus__foot {
+  margin-top: auto;
+  padding-top: 16px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+/* 양쪽에서 미끄러져 들어와요 */
+@media (prefers-reduced-motion: no-preference) {
+  .versus__side--white {
+    animation: slide-down 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .versus__side--black {
+    animation: slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .versus__vs {
+    animation: vs-pop 0.4s steps(4) 0.2s both;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-40px);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(40px);
+  }
+}
+
+@keyframes vs-pop {
+  from {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .versus__side {
+    align-items: center;
+    text-align: center;
+  }
+}
